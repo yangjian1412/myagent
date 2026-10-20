@@ -127,4 +127,4 @@ mobile-agent/
 
 ## License
 
-尚未添加开源许可证。如需以开源方式协作，建议补充 MIT 或 Apache-2.0。
+[MIT](LICENSE) © 2026 yangjian1412

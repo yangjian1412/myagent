@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  个人工具需要直连局域网里的本地模型（strata / ollama / llama.cpp 等），
+  这些服务通常只有 HTTP 明文，因此放开 cleartext。
+  UI 侧会对 http:// 端点给出明显的「明文连接」提示。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,9 @@
+# Normalize to LF in the repo, CRLF for Windows scripts
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.jar binary
+*.png binary
+*.jpg binary
+*.webp binary
+*.apk binary

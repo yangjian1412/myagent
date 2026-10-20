@@ -1,0 +1,46 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+.kotlin/
+
+# Android
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+captures/
+.cxx/
+.externalNativeBuild/
+release/
+output.json
+app/release/
+app/debug/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.hprof
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Signing / secrets
+*.jks
+*.keystore
+*.p12
+*.env
+.env.*
+keystore.properties
+secrets.properties
+
+# Logs / temp
+*.log
+*.tmp
+*.bak

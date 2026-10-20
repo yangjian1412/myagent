@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- 密钥存放在 Keystore 加密的存储里，不参与备份 -->
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="database" path="myagent-secrets.db" />
+</full-backup-content>

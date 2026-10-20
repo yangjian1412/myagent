@@ -45,6 +45,10 @@ data class AppSettings(
     val autoTitle: Boolean = true,
     /** 隐藏底部标签栏的文字，只留图标。默认隐藏，把空间留给对话。 */
     val hideTabLabels: Boolean = true,
+    /** Agent 的自我认知名字，会写进系统提示。 */
+    val agentName: String = "MyAgent",
+    /** 长期生效的回答偏好，会附加到系统提示。 */
+    val agentPreferences: String = "",
 )
 
 /** 常规设置存储（DataStore Preferences）。 */
@@ -56,6 +60,8 @@ class SettingsStore(private val context: Context) {
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val AUTO_TITLE = booleanPreferencesKey("auto_title")
         val HIDE_TAB_LABELS = booleanPreferencesKey("hide_tab_labels")
+        val AGENT_NAME = stringPreferencesKey("agent_name")
+        val AGENT_PREFERENCES = stringPreferencesKey("agent_preferences")
     }
 
     val settings: Flow<AppSettings> = context.appDataStore.data.map { prefs ->
@@ -65,6 +71,8 @@ class SettingsStore(private val context: Context) {
             dynamicColor = prefs[Keys.DYNAMIC_COLOR] ?: false,
             autoTitle = prefs[Keys.AUTO_TITLE] ?: true,
             hideTabLabels = prefs[Keys.HIDE_TAB_LABELS] ?: true,
+            agentName = prefs[Keys.AGENT_NAME] ?: "MyAgent",
+            agentPreferences = prefs[Keys.AGENT_PREFERENCES] ?: "",
         )
     }
 
@@ -86,5 +94,18 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setHideTabLabels(enabled: Boolean) {
         context.appDataStore.edit { it[Keys.HIDE_TAB_LABELS] = enabled }
+    }
+
+    suspend fun setAgentName(name: String) {
+        context.appDataStore.edit { it[Keys.AGENT_NAME] = name.take(MAX_AGENT_NAME_LEN) }
+    }
+
+    suspend fun setAgentPreferences(text: String) {
+        context.appDataStore.edit { it[Keys.AGENT_PREFERENCES] = text.take(MAX_AGENT_PREFERENCES_LEN) }
+    }
+
+    companion object {
+        const val MAX_AGENT_NAME_LEN = 40
+        const val MAX_AGENT_PREFERENCES_LEN = 2000
     }
 }

@@ -1,6 +1,6 @@
 # MyAgent 架构说明
 
-版本：`0.1.0beta`　包名：`com.mynok.myagent`
+版本：`0.1.0beta2`　包名：`com.mynok.myagent`
 
 手机端 AI Agent harness。核心目标：**本地模型与在线模型可自由切换**，具备工具调用、MCP 接入、会话分支、多模态识图能力，并尽量把可测逻辑放进纯 JVM 模块。
 
@@ -184,8 +184,11 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 
 ### 6.2 设置
 
-`SettingsStore`（DataStore）保存：`themeMode`、`themeColor`、`dynamicColor`、`autoTitle`、`hideTabLabels`。
+`SettingsStore`（DataStore）保存：`themeMode`、`themeColor`、`dynamicColor`、`autoTitle`、`hideTabLabels`、`agentName`、`agentPreferences`。
 `MainActivity` 在最外层收集，主题变化即时生效。
+
+`agentName` / `agentPreferences` 在每次发送前读取，拼到系统提示最前面（会话级提示与技能提示依次追加在后面），
+因此改完设置后下一次发送即生效；名字留空时回落到 `MyAgent`。
 
 ---
 

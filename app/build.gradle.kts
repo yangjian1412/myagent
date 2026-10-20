@@ -14,8 +14,8 @@ android {
         applicationId = "com.mynok.myagent"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.0beta"
+        versionCode = 3
+        versionName = "0.1.0beta2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

@@ -245,6 +245,8 @@ fun MyAgentRoot(container: AppContainer) {
             onDynamicColor = { settingsVm.setDynamicColor(it) },
             onAutoTitle = { settingsVm.setAutoTitle(it) },
             onHideTabLabels = { settingsVm.setHideTabLabels(it) },
+            onAgentName = { settingsVm.setAgentName(it) },
+            onAgentPreferences = { settingsVm.setAgentPreferences(it) },
             modifier = Modifier.fillMaxSize(),
         )
     }

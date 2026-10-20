@@ -22,6 +22,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -38,7 +39,7 @@ import com.mynok.myagent.data.repo.ThemeColor
 import com.mynok.myagent.data.repo.ThemeMode
 
 /** 当前版本号。 */
-const val APP_VERSION = "0.1.0beta"
+const val APP_VERSION = "0.1.0beta2"
 
 @Composable
 fun SettingsScreen(
@@ -48,6 +49,8 @@ fun SettingsScreen(
     onDynamicColor: (Boolean) -> Unit,
     onAutoTitle: (Boolean) -> Unit,
     onHideTabLabels: (Boolean) -> Unit,
+    onAgentName: (String) -> Unit,
+    onAgentPreferences: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val settings = state.settings
@@ -69,6 +72,38 @@ fun SettingsScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            item { SectionHeader("Agent") }
+            item {
+                SettingsCard {
+                    SettingLabel("Agent 名字", "写进系统提示，让它知道自己叫什么")
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = settings.agentName,
+                        onValueChange = onAgentName,
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("MyAgent") },
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    SettingLabel("偏好", "长期生效的回答习惯，会附加到每次请求的系统提示")
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = settings.agentPreferences,
+                        onValueChange = onAgentPreferences,
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 8,
+                        placeholder = { Text("例如：默认用中文回答；先给结论再解释；不要主动调用工具") },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "名字留空时仍按 MyAgent 处理；修改后对下一次发送生效。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
             item { SectionHeader("外观") }
             item {
                 SettingsCard {

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mynok.myagent.core.agent.AgentEvent
+import com.mynok.myagent.core.agent.SystemPrompt
 import com.mynok.myagent.core.context.AssembledContext
 import com.mynok.myagent.core.context.ContextBudget
 import com.mynok.myagent.core.context.MessageNode
@@ -356,12 +357,15 @@ class ChatViewModel(
         }
 
         val profile = repo.toProfile(profileEntity)
+        // Agent 身份与长期偏好来自设置页，每次都现取，改完下一次发送即生效
+        val appSettings = container.settingsStore.settings.first()
         // 技能 = 额外系统提示 + 可选的工具白名单
         val skill = _state.value.activeSkill
-        val system = buildString {
-            _state.value.systemPrompt?.takeIf { it.isNotBlank() }?.let { appendLine(it) }
-            skill?.prompt?.takeIf { it.isNotBlank() }?.let { appendLine(it) }
-        }.trim().ifBlank { null }
+        val system = SystemPrompt.build(
+            agentName = appSettings.agentName,
+            preferences = appSettings.agentPreferences,
+            extraPrompts = listOf(_state.value.systemPrompt, skill?.prompt),
+        )
         val allowedTools = skill?.forceTools
             ?.split(',')
             ?.map { it.trim() }

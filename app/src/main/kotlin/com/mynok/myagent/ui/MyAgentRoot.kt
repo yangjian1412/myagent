@@ -338,9 +338,11 @@ fun MyAgentRoot(container: AppContainer) {
             supportedEfforts = chatState.supportedReasoningEfforts,
             reasoningEffort = chatState.reasoningEffort,
             showReasoning = chatState.showReasoning,
+            showToolCalls = chatState.showToolCalls,
             onSelectModel = { chatVm.selectModel(it) },
             onReasoningEffort = { chatVm.setReasoningEffort(it) },
             onShowReasoning = { chatVm.setShowReasoning(it) },
+            onShowToolCalls = { chatVm.setShowToolCalls(it) },
             onShowContext = {
                 showConversationSettings = false
                 chatVm.showContextInspector()
@@ -462,6 +464,7 @@ private fun ChatLayout(
                 modifier = Modifier.weight(1f),
                 streamingReasoning = state.streamingReasoning,
                 showReasoning = state.showReasoning,
+                showToolCalls = state.showToolCalls,
             )
             if (state.skills.isNotEmpty()) {
                 SkillChipRow(

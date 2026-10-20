@@ -38,7 +38,7 @@ import com.mynok.myagent.data.db.ModelProfileEntity
 /**
  * 对话设置面板。
  *
- * 换模型、换思考强度、开关思考过程展示——都在这里，不离开对话。
+ * 换模型、换思考强度、开关思考过程与工具调用展示——都在这里，不离开对话。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,9 +48,11 @@ fun ConversationSettingsSheet(
     supportedEfforts: List<ReasoningEffort>,
     reasoningEffort: ReasoningEffort,
     showReasoning: Boolean,
+    showToolCalls: Boolean,
     onSelectModel: (String) -> Unit,
     onReasoningEffort: (ReasoningEffort) -> Unit,
     onShowReasoning: (Boolean) -> Unit,
+    onShowToolCalls: (Boolean) -> Unit,
     onShowContext: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -168,6 +170,22 @@ fun ConversationSettingsSheet(
                     )
                 }
                 Switch(checked = showReasoning, onCheckedChange = onShowReasoning)
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("显示工具调用", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "展示调用记录、参数与返回结果；关闭后只保留最终回复",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = showToolCalls, onCheckedChange = onShowToolCalls)
             }
 
             Spacer(Modifier.height(14.dp))

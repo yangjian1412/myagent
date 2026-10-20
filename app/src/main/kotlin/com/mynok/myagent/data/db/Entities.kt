@@ -26,6 +26,8 @@ data class ConversationEntity(
     val reasoningEffort: String = "OFF",
     /** 是否在对话里展示模型的思考过程。 */
     val showReasoning: Boolean = true,
+    /** 是否在对话里展示工具调用过程与结果。 */
+    val showToolCalls: Boolean = true,
 )
 
 /**

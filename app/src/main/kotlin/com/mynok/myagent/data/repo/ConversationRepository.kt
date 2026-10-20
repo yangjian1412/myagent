@@ -90,6 +90,9 @@ class ConversationRepository(
     suspend fun setConversationShowReasoning(id: String, show: Boolean) =
         conversationDao.setShowReasoning(id, show)
 
+    suspend fun setConversationShowToolCalls(id: String, show: Boolean) =
+        conversationDao.setShowToolCalls(id, show)
+
     suspend fun setActiveLeaf(conversationId: String, leafId: String?) {
         val conv = conversationDao.get(conversationId) ?: return
         conversationDao.update(conv.copy(activeLeafId = leafId, updatedAt = System.currentTimeMillis()))

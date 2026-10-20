@@ -165,7 +165,7 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 
 | 表 | 说明 |
 |---|---|
-| `conversations` | 标题、模型、系统提示、思考强度/展示、`activeLeafId`、`updatedAt` |
+| `conversations` | 标题、模型、系统提示、思考强度/展示、工具调用展示、`activeLeafId`、`updatedAt` |
 | `messages` | `parentId` 树结构、角色、正文、`reasoning`、工具轨迹、附件 |
 | `model_profiles` | 模型档案（不含 key），`reasoningLevels` 为逗号分隔等级 |
 | `skills` | 技能：名称、描述、提示词、可选工具白名单 |
@@ -180,6 +180,7 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 | 2 | 新增 `skills` |
 | 3 | 会话加 `reasoningEffort` / `showReasoning`，消息加 `reasoning` |
 | 4 | 模型档案加 `reasoningLevels`（幂等迁移，兼容已升到 v3 的库） |
+| 5 | 会话加 `showToolCalls`（幂等迁移，默认显示，老会话行为不变） |
 
 ### 6.2 设置
 
@@ -201,7 +202,8 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 
 ### 7.2 对话设置面板
 
-底部弹层 `ConversationSettingsSheet`：换模型、换思考强度（只列当前模型支持的档位）、是否展示思考过程、上下文检查器入口。
+底部弹层 `ConversationSettingsSheet`：换模型、换思考强度（只列当前模型支持的档位）、是否展示思考过程、是否展示工具调用、上下文检查器入口。
+关闭工具调用展示后，工具结果消息、调用 chip 与实时轨迹都不再渲染，只保留模型的最终回复。
 
 ### 7.3 主题
 

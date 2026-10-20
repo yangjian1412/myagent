@@ -57,6 +57,8 @@ data class ChatUiState(
     val reasoningEffort: ReasoningEffort = ReasoningEffort.OFF,
     /** 是否展示思考过程。 */
     val showReasoning: Boolean = true,
+    /** 是否展示工具调用过程与结果。 */
+    val showToolCalls: Boolean = true,
     /** 正在流式输出的思考内容。 */
     val streamingReasoning: String = "",
 ) {
@@ -149,6 +151,7 @@ class ChatViewModel(
                     systemPrompt = conv?.systemPrompt,
                     reasoningEffort = if (effort in supported) effort else ReasoningEffort.OFF,
                     showReasoning = conv?.showReasoning ?: true,
+                    showToolCalls = conv?.showToolCalls ?: true,
                     streamingReasoning = "",
                     traces = emptyList(),
                     error = null,
@@ -175,6 +178,7 @@ class ChatViewModel(
                     systemPrompt = null,
                     reasoningEffort = ReasoningEffort.OFF,
                     showReasoning = true,
+                    showToolCalls = true,
                 )
             }
         }
@@ -226,6 +230,13 @@ class ChatViewModel(
         _state.update { it.copy(showReasoning = show) }
         val convId = _state.value.conversationId ?: return
         viewModelScope.launch { repo.setConversationShowReasoning(convId, show) }
+    }
+
+    /** 是否在对话里展示工具调用过程与结果（关闭后只留最终回复）。 */
+    fun setShowToolCalls(show: Boolean) {
+        _state.update { it.copy(showToolCalls = show) }
+        val convId = _state.value.conversationId ?: return
+        viewModelScope.launch { repo.setConversationShowToolCalls(convId, show) }
     }
 
     fun setSystemPrompt(prompt: String?) {

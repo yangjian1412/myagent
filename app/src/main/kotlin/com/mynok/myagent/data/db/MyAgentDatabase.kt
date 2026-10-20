@@ -14,7 +14,7 @@ import androidx.room.RoomDatabase
         ToolPolicyEntity::class,
         SkillEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class MyAgentDatabase : RoomDatabase() {
@@ -37,7 +37,7 @@ abstract class MyAgentDatabase : RoomDatabase() {
                     MyAgentDatabase::class.java,
                     "myagent.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                     .also { instance = it }
@@ -90,6 +90,21 @@ abstract class MyAgentDatabase : RoomDatabase() {
                 if (!db.hasColumn("model_profiles", "reasoningLevels")) {
                     db.execSQL(
                         "ALTER TABLE `model_profiles` ADD COLUMN `reasoningLevels` TEXT NOT NULL DEFAULT ''",
+                    )
+                }
+            }
+        }
+
+        /**
+         * v4 → v5：会话增加「显示工具调用」开关。
+         *
+         * 默认显示，老会话行为不变；同样做幂等判断，防止重复升级时列已存在。
+         */
+        val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                if (!db.hasColumn("conversations", "showToolCalls")) {
+                    db.execSQL(
+                        "ALTER TABLE `conversations` ADD COLUMN `showToolCalls` INTEGER NOT NULL DEFAULT 1",
                     )
                 }
             }

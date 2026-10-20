@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,9 +70,17 @@ fun MessageList(
     modifier: Modifier = Modifier,
     streamingReasoning: String = "",
     showReasoning: Boolean = true,
+    showToolCalls: Boolean = true,
 ) {
     val listState = rememberLazyListState()
-    val total = messages.size + if (isStreaming) 1 else 0
+    // 关闭「显示工具调用」时把工具消息从列表里真正移除，
+    // 但保留原始下标，重新生成 / 编辑仍然对应到正确的节点。
+    val visible = remember(messages, showReasoning, showToolCalls) {
+        messages.withIndex().filter { (_, message) ->
+            isMessageVisible(message, showReasoning, showToolCalls)
+        }
+    }
+    val total = visible.size + if (isStreaming) 1 else 0
     LaunchedEffect(total, streamingText.length) {
         if (total > 0) {
             runCatching { listState.animateScrollToItem((total - 1).coerceAtLeast(0)) }
@@ -85,10 +93,11 @@ fun MessageList(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        itemsIndexed(messages) { index, msg ->
+        items(items = visible, key = { it.index }) { (index, msg) ->
             MessageBubble(
                 message = msg,
                 showReasoning = showReasoning,
+                showToolCalls = showToolCalls,
                 onRegenerate = { onRegenerate(index) },
                 onEdit = { onEdit(index) },
             )
@@ -102,7 +111,7 @@ fun MessageList(
                 )
             }
         }
-        if (traces.isNotEmpty()) {
+        if (showToolCalls && traces.isNotEmpty()) {
             item(key = "__traces__") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     traces.forEach { ToolTraceRow(it) }
@@ -110,6 +119,19 @@ fun MessageList(
             }
         }
     }
+}
+
+/** 关闭工具调用展示时，隐藏工具结果和「只有调用、没有可见内容」的助手消息。 */
+private fun isMessageVisible(
+    message: ChatMessage,
+    showReasoning: Boolean,
+    showToolCalls: Boolean,
+): Boolean {
+    if (showToolCalls) return true
+    if (message.role == Role.TOOL) return false
+    val hasBody = message.text.isNotBlank() || message.images.isNotEmpty()
+    val hasReasoning = showReasoning && message.reasoning.isNotBlank()
+    return hasBody || hasReasoning
 }
 
 /** 可折叠的思考过程。 */
@@ -166,6 +188,7 @@ private fun MessageBubble(
     onRegenerate: (String) -> Unit,
     onEdit: (String) -> Unit,
     showReasoning: Boolean = true,
+    showToolCalls: Boolean = true,
 ) {
     val isUser = message.role == Role.USER
     val isTool = message.role == Role.TOOL
@@ -213,7 +236,7 @@ private fun MessageBubble(
                     Spacer(Modifier.height(6.dp))
                     ImagePlaceholder(img)
                 }
-                if (message.hasToolCalls) {
+                if (showToolCalls && message.hasToolCalls) {
                     Spacer(Modifier.height(6.dp))
                     message.toolCalls.forEach { call ->
                         AssistChip(

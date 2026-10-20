@@ -46,6 +46,9 @@ interface ConversationDao {
     @Query("UPDATE conversations SET showReasoning = :show WHERE id = :id")
     suspend fun setShowReasoning(id: String, show: Boolean)
 
+    @Query("UPDATE conversations SET showToolCalls = :show WHERE id = :id")
+    suspend fun setShowToolCalls(id: String, show: Boolean)
+
     @Query("UPDATE conversations SET pinned = :pinned WHERE id = :id")
     suspend fun setPinned(id: String, pinned: Boolean)
 

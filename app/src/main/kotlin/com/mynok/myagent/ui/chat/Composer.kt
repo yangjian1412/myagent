@@ -11,10 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AssistChip
@@ -36,15 +39,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.mynok.myagent.core.model.ContentPart
 
 @Composable
 fun Composer(
     isStreaming: Boolean,
-    attachments: List<ContentPart.Image>,
+    attachments: List<PendingAttachment>,
     onSend: (String) -> Unit,
     onStop: () -> Unit,
     onPickImage: () -> Unit,
+    onPickFile: () -> Unit,
     onRemoveAttachment: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -58,16 +61,28 @@ fun Composer(
         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
             if (attachments.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(attachments) { img ->
+                    itemsIndexed(attachments) { index, attachment ->
                         AssistChip(
-                            onClick = {},
+                            onClick = { onRemoveAttachment(index) },
                             label = {
-                                Text(
-                                    img.displayName ?: "图片",
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = if (attachment.isImage) {
+                                            Icons.Filled.Image
+                                        } else {
+                                            Icons.Filled.Description
+                                        },
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        attachment.label,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
                             },
                         )
                     }
@@ -77,6 +92,9 @@ fun Composer(
             Row(verticalAlignment = Alignment.Bottom) {
                 IconButton(onClick = onPickImage, enabled = !isStreaming) {
                     Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "添加图片")
+                }
+                IconButton(onClick = onPickFile, enabled = !isStreaming) {
+                    Icon(Icons.Filled.AttachFile, contentDescription = "添加文件")
                 }
                 OutlinedTextField(
                     value = text,
@@ -94,12 +112,12 @@ fun Composer(
                 } else {
                     FilledIconButton(
                         onClick = {
-                            if (text.isNotBlank()) {
+                            if (text.isNotBlank() || attachments.isNotEmpty()) {
                                 onSend(text)
                                 text = ""
                             }
                         },
-                        enabled = text.isNotBlank(),
+                        enabled = text.isNotBlank() || attachments.isNotEmpty(),
                     ) {
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送")
                     }

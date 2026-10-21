@@ -71,6 +71,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mynok.myagent.MainActivity
 import com.mynok.myagent.data.db.ConversationEntity
 import com.mynok.myagent.di.AppContainer
+import com.mynok.myagent.tools.android.FileLoader
 import com.mynok.myagent.tools.android.ImageLoader
 import com.mynok.myagent.ui.chat.ApprovalDialog
 import com.mynok.myagent.ui.chat.ChatUiState
@@ -208,6 +209,16 @@ fun MyAgentRoot(
                     }
                 }
             },
+            onPickFile = {
+                activity?.requestFile { uri ->
+                    scope.launch {
+                        when (val result = FileLoader.load(context, uri)) {
+                            is FileLoader.Result.Ok -> chatVm.attach(result.part, result.label, result.note)
+                            is FileLoader.Result.Failed -> chatVm.reportAttachmentError(result.message)
+                        }
+                    }
+                }
+            },
         )
     }
 
@@ -215,10 +226,10 @@ fun MyAgentRoot(
         when (modelTab) {
             ModelTab.PROFILES -> ModelsScreen(
                 state = modelsState,
-                onSave = { id, name, type, baseUrl, modelId, key, cw, maxOut, tools, vision, temp, levels ->
+                onSave = { id, name, type, baseUrl, modelId, key, cw, maxOut, tools, vision, fileInput, temp, levels ->
                     modelsVm.save(
                         id, name, type, baseUrl, modelId, key, cw, maxOut,
-                        tools, vision, temp, levels,
+                        tools, vision, fileInput, temp, levels,
                     )
                 },
                 onDelete = { modelsVm.delete(it) },
@@ -511,6 +522,7 @@ private fun ChatLayout(
     onOpenSettings: () -> Unit,
     vm: ChatViewModel,
     onPickImage: () -> Unit,
+    onPickFile: () -> Unit,
 ) {
     var editingIndex by remember { mutableStateOf(-1) }
     var editingText by remember { mutableStateOf("") }
@@ -595,6 +607,7 @@ private fun ChatLayout(
                 onSend = { vm.send(it) },
                 onStop = { vm.stop() },
                 onPickImage = onPickImage,
+                onPickFile = onPickFile,
                 onRemoveAttachment = { vm.removeAttachment(it) },
             )
         }

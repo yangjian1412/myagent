@@ -15,7 +15,7 @@ import androidx.room.RoomDatabase
         SkillEntity::class,
         ScheduledTaskEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class MyAgentDatabase : RoomDatabase() {
@@ -46,6 +46,7 @@ abstract class MyAgentDatabase : RoomDatabase() {
                         MIGRATION_4_5,
                         MIGRATION_5_6,
                         MIGRATION_6_7,
+                        MIGRATION_7_8,
                     )
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
@@ -204,6 +205,24 @@ abstract class MyAgentDatabase : RoomDatabase() {
                     )
                     """.trimIndent(),
                 )
+            }
+        }
+
+        /**
+         * v7 → v8：模型档案加 `supportsFileInput`。
+         *
+         * 声明这个模型能不能把文件（PDF 等）原样读进去。
+         * 老档案一律按 false 处理——比起发一个会被 400 拒掉的请求，
+         * 拦住并提示换模型更合适。
+         */
+        val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                if (!db.hasColumn("model_profiles", "supportsFileInput")) {
+                    db.execSQL(
+                        "ALTER TABLE `model_profiles` " +
+                            "ADD COLUMN `supportsFileInput` INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
             }
         }
     }

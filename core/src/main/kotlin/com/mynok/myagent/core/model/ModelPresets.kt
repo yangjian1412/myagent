@@ -12,6 +12,8 @@ data class ModelPreset(
     val reasoningEfforts: List<ReasoningEffort> = emptyList(),
     val supportsVision: Boolean? = null,
     val supportsTools: Boolean? = null,
+    /** 能不能把文件（PDF 等）原样发给模型。null 表示不确定，交给用户自己定。 */
+    val supportsFileInput: Boolean? = null,
 )
 
 /**
@@ -32,6 +34,7 @@ object ModelPresets {
             ),
             supportsVision = true,
             supportsTools = true,
+            supportsFileInput = true,
         ),
         prefix("o3", "o4") to ModelPreset(
             contextWindow = 200_000,
@@ -41,12 +44,14 @@ object ModelPresets {
             ),
             supportsVision = true,
             supportsTools = true,
+            supportsFileInput = true,
         ),
         match("gpt-4.1", "gpt-4o") to ModelPreset(
             contextWindow = 128_000,
             maxOutputTokens = 32_768,
             supportsVision = true,
             supportsTools = true,
+            supportsFileInput = true,
         ),
         // Anthropic：没有 effort 档位，是 token 预算
         match("claude") to ModelPreset(
@@ -57,6 +62,7 @@ object ModelPresets {
             ),
             supportsVision = true,
             supportsTools = true,
+            supportsFileInput = true,
         ),
         // Gemini：2.5 Pro 不能关闭思考，2.5 Flash 可以
         match("gemini-2.5-pro") to ModelPreset(
@@ -65,6 +71,7 @@ object ModelPresets {
             reasoningEfforts = listOf(ReasoningEffort.MEDIUM, ReasoningEffort.HIGH),
             supportsVision = true,
             supportsTools = true,
+            supportsFileInput = true,
         ),
         match("gemini-2.5-flash", "gemini-2.0") to ModelPreset(
             contextWindow = 1_048_576,
@@ -74,12 +81,14 @@ object ModelPresets {
             ),
             supportsVision = true,
             supportsTools = true,
+            supportsFileInput = true,
         ),
         match("gemini") to ModelPreset(
             contextWindow = 1_048_576,
             maxOutputTokens = 65_536,
             supportsVision = true,
             supportsTools = true,
+            supportsFileInput = true,
         ),
         // 始终思考、不接受 effort 参数的模型
         match("deepseek-r1", "deepseek-reasoner", "glm-z1", "qwq") to ModelPreset(

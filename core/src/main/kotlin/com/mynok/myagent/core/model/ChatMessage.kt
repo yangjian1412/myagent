@@ -83,6 +83,10 @@ data class ChatMessage(
     val images: List<ContentPart.Image>
         get() = parts.filterIsInstance<ContentPart.Image>()
 
+    /** 用户发过来的文件附件。 */
+    val files: List<ContentPart.File>
+        get() = parts.filterIsInstance<ContentPart.File>()
+
     val hasToolCalls: Boolean get() = toolCalls.isNotEmpty()
 
     companion object {

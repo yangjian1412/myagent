@@ -1,5 +1,6 @@
 package com.mynok.myagent.ui.models
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,6 +79,7 @@ fun ModelsScreen(
         maxOutputTokens: Int,
         supportsTools: Boolean,
         supportsVision: Boolean,
+        supportsFileInput: Boolean,
         temperature: Double?,
         reasoningLevels: List<ReasoningEffort>,
     ) -> Unit,
@@ -158,7 +160,8 @@ fun ModelsScreen(
                 onSave(
                     args.id, args.name, args.providerType, args.baseUrl, args.modelId,
                     args.apiKey, args.contextWindow, args.maxOutputTokens,
-                    args.supportsTools, args.supportsVision, args.temperature, args.reasoningLevels,
+                    args.supportsTools, args.supportsVision, args.supportsFileInput,
+                    args.temperature, args.reasoningLevels,
                 )
             },
             catalog = catalog,
@@ -175,7 +178,8 @@ fun ModelsScreen(
                 onSave(
                     args.id, args.name, args.providerType, args.baseUrl, args.modelId,
                     args.apiKey, args.contextWindow, args.maxOutputTokens,
-                    args.supportsTools, args.supportsVision, args.temperature, args.reasoningLevels,
+                    args.supportsTools, args.supportsVision, args.supportsFileInput,
+                    args.temperature, args.reasoningLevels,
                 )
             },
             catalog = catalog,
@@ -229,9 +233,14 @@ private fun ModelCard(
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                // 四个能力标记在窄屏上放不下，让它能横着推
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            ) {
                 AssistChip(onClick = {}, label = { Text(if (profile.supportsTools) "支持工具调用" else "不支持工具") })
                 AssistChip(onClick = {}, label = { Text(if (profile.supportsVision) "支持识图" else "不支持识图") })
+                AssistChip(onClick = {}, label = { Text(if (profile.supportsFileInput) "支持文档输入" else "不支持文档") })
                 AssistChip(onClick = {}, label = { Text("${profile.contextWindow / 1024}K 上下文") })
             }
             if (probeText != null) {
@@ -262,6 +271,7 @@ data class ModelEditArgs(
     val maxOutputTokens: Int,
     val supportsTools: Boolean,
     val supportsVision: Boolean,
+    val supportsFileInput: Boolean,
     val temperature: Double?,
     val reasoningLevels: List<ReasoningEffort> = emptyList(),
 )
@@ -292,6 +302,7 @@ private fun ModelEditDialog(
     }
     var supportsTools by remember { mutableStateOf(existing?.supportsTools ?: true) }
     var supportsVision by remember { mutableStateOf(existing?.supportsVision ?: false) }
+    var supportsFileInput by remember { mutableStateOf(existing?.supportsFileInput ?: false) }
     var contextWindow by remember { mutableStateOf((existing?.contextWindow ?: 32768).toString()) }
     var maxOutput by remember { mutableStateOf((existing?.maxOutputTokens ?: 4096).toString()) }
     var providerMenu by remember { mutableStateOf(false) }
@@ -314,6 +325,7 @@ private fun ModelEditDialog(
         }
         preset.supportsVision?.let { supportsVision = it }
         preset.supportsTools?.let { supportsTools = it }
+        preset.supportsFileInput?.let { supportsFileInput = it }
         if (preset.reasoningEfforts.isNotEmpty()) {
             reasoningLevels = preset.reasoningEfforts.filter { it.isOn }.sortedBy { it.ordinal }
         }
@@ -337,6 +349,7 @@ private fun ModelEditDialog(
         }
         (remote.supportsVision ?: preset?.supportsVision)?.let { supportsVision = it }
         (remote.supportsTools ?: preset?.supportsTools)?.let { supportsTools = it }
+        preset?.supportsFileInput?.let { supportsFileInput = it }
         val efforts = remote.reasoningEfforts ?: preset?.reasoningEfforts
         if (!efforts.isNullOrEmpty()) {
             reasoningLevels = efforts.filter { it.isOn }.sortedBy { it.ordinal }
@@ -573,6 +586,14 @@ private fun ModelEditDialog(
                     checked = supportsVision,
                     onCheckedChange = { supportsVision = it },
                 )
+                SettingSwitchRow(
+                    title = "文档输入",
+                    subtitle = "支持把文件（PDF 等）原样发给模型。" +
+                        "OpenAI 官方接口、Claude、Gemini 支持；" +
+                        "本地推理服务（Ollama、LM Studio）通常不支持。",
+                    checked = supportsFileInput,
+                    onCheckedChange = { supportsFileInput = it },
+                )
 
                 Text("思考强度", style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -613,6 +634,7 @@ private fun ModelEditDialog(
                             maxOutputTokens = maxOutput.toIntOrNull() ?: 4096,
                             supportsTools = supportsTools,
                             supportsVision = supportsVision,
+                            supportsFileInput = supportsFileInput,
                             temperature = null,
                             reasoningLevels = reasoningLevels.sortedBy { it.ordinal },
                         ),

@@ -36,6 +36,15 @@ data class ModelProfile(
     val headers: Map<String, String> = emptyMap(),
     val supportsTools: Boolean = true,
     val supportsVision: Boolean = false,
+    /**
+     * 是否支持把文件原样发给模型（PDF 等）。
+     *
+     * 各家协议差异很大：Gemini 用 `inlineData`、Anthropic 用 `document` 块、
+     * OpenAI 兼容用 `file` 内容块，而本地推理服务（Ollama、LM Studio）多半不支持。
+     * 声明为 false 时，App 会在发送前拦下来并提示换模型，
+     * 而不是发一个会被服务端 400 拒掉的请求。
+     */
+    val supportsFileInput: Boolean = false,
     val supportsStreaming: Boolean = true,
     /** 上下文窗口（token），用于压缩策略。 */
     val contextWindow: Int = 32_768,

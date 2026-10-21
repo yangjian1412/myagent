@@ -246,6 +246,7 @@ class ConversationRepository(
         headers = Mappers.decodeMap(entity.headersJson),
         supportsTools = entity.supportsTools,
         supportsVision = entity.supportsVision,
+        supportsFileInput = entity.supportsFileInput,
         supportsStreaming = entity.supportsStreaming,
         contextWindow = entity.contextWindow,
         maxOutputTokens = entity.maxOutputTokens,

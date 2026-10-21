@@ -2,6 +2,7 @@ package com.mynok.myagent.core.model.gemini
 
 import com.mynok.myagent.core.model.ChatMessage
 import com.mynok.myagent.core.model.ContentPart
+import com.mynok.myagent.core.model.ContentParts.asTextContent
 import com.mynok.myagent.core.model.FinishReason
 import com.mynok.myagent.core.model.ModelEvent
 import com.mynok.myagent.core.model.ModelException
@@ -276,11 +277,33 @@ class GeminiProvider(
     private fun encodePart(part: ContentPart): JsonElement = when (part) {
         is ContentPart.Text -> textPart(part.text)
         is ContentPart.Image -> inlineDataPart(part.mimeType, part.base64)
-        is ContentPart.File -> inlineDataPart(
-            part.mimeType.ifBlank { "application/octet-stream" },
-            part.base64,
-        )
+        is ContentPart.File -> {
+            val mime = part.mimeType.ifBlank { "application/octet-stream" }
+            // 文本类附件转成文本块：所有模型都能读，也更省 token
+            val asText = part.asTextContent()
+            when {
+                asText != null -> textPart(asText)
+                mime in INLINE_DATA_MIME -> inlineDataPart(mime, part.base64)
+                // Gemini 的 inlineData 只认白名单里的类型，别的直接发会被 400 拒掉
+                else -> textPart(
+                    "[附件 ${part.name}（$mime）的内容没有发出去，" +
+                        "Gemini 不支持这种格式的内联数据]",
+                )
+            }
+        }
     }
+
+    /** Gemini `inlineData` 允许的 MIME 类型。 */
+    private val INLINE_DATA_MIME = setOf(
+        "application/pdf",
+        "text/plain",
+        "text/html",
+        "text/css",
+        "text/javascript",
+        "application/x-javascript",
+        "text/x-typescript",
+        "application/json",
+    )
 
     private fun textPart(text: String): JsonElement = buildJsonObject {
         put("text", text)

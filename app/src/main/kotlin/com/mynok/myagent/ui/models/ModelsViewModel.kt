@@ -92,6 +92,7 @@ class ModelsViewModel(
         maxOutputTokens: Int,
         supportsTools: Boolean,
         supportsVision: Boolean,
+        supportsFileInput: Boolean,
         temperature: Double?,
         reasoningLevels: List<ReasoningEffort> = emptyList(),
     ) {
@@ -123,6 +124,7 @@ class ModelsViewModel(
                         headersJson = existing?.headersJson ?: "{}",
                         supportsTools = supportsTools,
                         supportsVision = supportsVision,
+                        supportsFileInput = supportsFileInput,
                         supportsStreaming = true,
                         contextWindow = contextWindow,
                         maxOutputTokens = maxOutputTokens,

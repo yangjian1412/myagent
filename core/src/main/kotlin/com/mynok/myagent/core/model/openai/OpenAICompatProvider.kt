@@ -2,6 +2,7 @@ package com.mynok.myagent.core.model.openai
 
 import com.mynok.myagent.core.model.ChatMessage
 import com.mynok.myagent.core.model.ContentPart
+import com.mynok.myagent.core.model.ContentParts.asTextContent
 import com.mynok.myagent.core.model.FinishReason
 import com.mynok.myagent.core.model.ModelEvent
 import com.mynok.myagent.core.model.ModelException
@@ -300,12 +301,34 @@ class OpenAICompatProvider(
                         },
                     )
 
-                    is ContentPart.File -> add(
-                        buildJsonObject {
-                            put("type", "text")
-                            put("text", "[附件 ${part.name} (${part.mimeType})]")
-                        },
-                    )
+                    is ContentPart.File -> {
+                        // 文本类附件转成文本块：所有模型都能读，也更省 token
+                        val asText = part.asTextContent()
+                        if (asText != null) {
+                            add(
+                                buildJsonObject {
+                                    put("type", "text")
+                                    put("text", asText)
+                                },
+                            )
+                        } else {
+                            add(
+                                buildJsonObject {
+                                    put("type", "file")
+                                    put(
+                                        "file",
+                                        buildJsonObject {
+                                            put("filename", part.name)
+                                            put(
+                                                "file_data",
+                                                "data:${part.mimeType};base64,${part.base64}",
+                                            )
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }

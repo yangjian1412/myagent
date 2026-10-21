@@ -10,6 +10,7 @@ import com.mynok.myagent.core.context.ContextBudget
 import com.mynok.myagent.core.context.MessageNode
 import com.mynok.myagent.core.model.ChatMessage
 import com.mynok.myagent.core.model.ContentPart
+import com.mynok.myagent.core.model.ContentParts
 import com.mynok.myagent.core.model.ReasoningEffort
 import com.mynok.myagent.core.model.Role
 import com.mynok.myagent.core.skills.SkillCatalog
@@ -60,6 +61,21 @@ data class ToolTrace(
     enum class Status { RUNNING, DONE, FAILED, DENIED }
 }
 
+/**
+ * 待发送的附件。
+ *
+ * 内容用 core 的 [ContentPart] 表示（图片 / 文件 / 文本），
+ * 另外记下 chip 上要显示的名字——文本类文件会被转成文本块，
+ * 光看 [ContentPart.Text] 已经认不出是哪个文件了。
+ */
+data class PendingAttachment(
+    val part: ContentPart,
+    /** chip 上显示的名字。 */
+    val label: String,
+    /** 是图片吗（决定 chip 图标）。 */
+    val isImage: Boolean,
+)
+
 data class ChatUiState(
     val conversationId: String? = null,
     val title: String = "新会话",
@@ -71,7 +87,8 @@ data class ChatUiState(
     val contextInfo: AssembledContext? = null,
     val models: List<ModelProfileEntity> = emptyList(),
     val currentModelId: String? = null,
-    val pendingAttachments: List<ContentPart.Image> = emptyList(),
+    /** 待发送的附件：图片和文件。 */
+    val pendingAttachments: List<PendingAttachment> = emptyList(),
     val systemPrompt: String? = null,
     val skills: List<com.mynok.myagent.data.db.SkillEntity> = emptyList(),
     val activeSkillId: String? = null,
@@ -287,7 +304,29 @@ class ChatViewModel(
 
     fun send(text: String) {
         val content = text.trim()
-        if (content.isEmpty() || _state.value.isStreaming) return
+        val attachments = _state.value.pendingAttachments
+        if (content.isEmpty() && attachments.isEmpty()) return
+        if (_state.value.isStreaming) return
+
+        // 模型读不了二进制附件时就别发过去，换个模型或改成文本再说。
+        // 文本类附件在协议层会转成文本块，所有模型都吃得下，不受这个限制。
+        val hasBinaryAttachment = attachments.any { attachment ->
+            (attachment.part as? ContentPart.File)
+                ?.let { !ContentParts.isTextual(it.mimeType, it.name) } == true
+        }
+        if (hasBinaryAttachment) {
+            val profile = _state.value.models.firstOrNull { it.id == _state.value.currentModelId }
+            if (profile != null && !profile.supportsFileInput) {
+                _state.update {
+                    it.copy(
+                        error = "模型「${profile.name}」不支持文档输入，发文件过去只会报错。" +
+                            "换个模型，或者在「模型 → 模型配置」里打开「文档输入」。",
+                    )
+                }
+                return
+            }
+        }
+
         viewModelScope.launch {
             val convId = _state.value.conversationId ?: run {
                 val id = repo.createConversation(
@@ -304,14 +343,20 @@ class ChatViewModel(
             val parent = pathBefore.lastOrNull()?.id
             val userMessage = ChatMessage(
                 role = Role.USER,
-                parts = listOf(ContentPart.Text(content)) + _state.value.pendingAttachments,
+                // 只发附件没打字时别留一个空文本块，Gemini 不吃空的 text
+                parts = buildList {
+                    if (content.isNotEmpty()) add(ContentPart.Text(content))
+                    attachments.forEach { add(it.part) }
+                },
             )
             val userId = repo.appendMessage(convId, parent, userMessage)
             currentParentId = userId
 
             if (_state.value.nodes.isEmpty()) {
-                repo.renameConversation(convId, Mappers.conversationTitleOf(content))
-                _state.update { it.copy(title = Mappers.conversationTitleOf(content)) }
+                // 光发一个文件没打字的话，拿文件名当会话标题
+                val titleSeed = content.ifBlank { attachments.firstOrNull()?.label.orEmpty() }
+                repo.renameConversation(convId, Mappers.conversationTitleOf(titleSeed))
+                _state.update { it.copy(title = Mappers.conversationTitleOf(titleSeed)) }
             }
             _state.update { it.copy(pendingAttachments = emptyList()) }
 
@@ -551,7 +596,42 @@ class ChatViewModel(
     val showContext: StateFlow<Boolean> = _showContext.asStateFlow()
 
     fun attachImage(image: ContentPart.Image) {
-        _state.update { it.copy(pendingAttachments = it.pendingAttachments + image) }
+        _state.update {
+            it.copy(
+                pendingAttachments = it.pendingAttachments + PendingAttachment(
+                    part = image,
+                    label = image.displayName ?: "图片",
+                    isImage = true,
+                ),
+            )
+        }
+    }
+
+    /**
+     * 挂一个附件（文件）。
+     *
+     * @param part 文件内容（[ContentPart.File] 或转成文本的 [ContentPart.Text]）
+     * @param label chip 上显示的文件名
+     * @param note 附加说明（比如「文件太长被截断了」）
+     */
+    fun attach(part: ContentPart, label: String, note: String?) {
+        _state.update {
+            it.copy(
+                pendingAttachments = it.pendingAttachments + PendingAttachment(
+                    part = part,
+                    label = label,
+                    isImage = part is ContentPart.Image,
+                ),
+            )
+        }
+        if (note != null) {
+            _state.update { it.copy(error = note) }
+        }
+    }
+
+    /** 附件读取失败时给用户看的话。 */
+    fun reportAttachmentError(message: String) {
+        _state.update { it.copy(error = message) }
     }
 
     fun removeAttachment(index: Int) {

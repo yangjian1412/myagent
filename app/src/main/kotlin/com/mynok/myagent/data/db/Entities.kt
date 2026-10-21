@@ -78,6 +78,8 @@ data class ModelProfileEntity(
     val headersJson: String = "{}",
     val supportsTools: Boolean = true,
     val supportsVision: Boolean = false,
+    /** 是否支持把文件（PDF 等）原样发给模型。 */
+    val supportsFileInput: Boolean = false,
     val supportsStreaming: Boolean = true,
     val contextWindow: Int = 32_768,
     val maxOutputTokens: Int = 4_096,

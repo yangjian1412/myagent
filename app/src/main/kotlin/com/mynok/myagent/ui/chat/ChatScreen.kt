@@ -1,5 +1,6 @@
 package com.mynok.myagent.ui.chat
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -52,7 +54,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mynok.myagent.core.model.ChatMessage
@@ -236,6 +246,10 @@ private fun MessageBubble(
                     Spacer(Modifier.height(6.dp))
                     ImagePlaceholder(img)
                 }
+                message.files.forEach { file ->
+                    Spacer(Modifier.height(6.dp))
+                    FilePlaceholder(file)
+                }
                 if (showToolCalls && message.hasToolCalls) {
                     Spacer(Modifier.height(6.dp))
                     message.toolCalls.forEach { call ->
@@ -409,12 +423,47 @@ private fun ImagePlaceholder(image: ContentPart.Image) {
     }
 }
 
+@Composable
+private fun FilePlaceholder(file: ContentPart.File) {
+    // 文件以 Base64 存库，这里只显示文件名与类型
+    val sizeKb = file.base64.length * 3 / 4 / 1024
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.Description, null, Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "${file.name}（${file.mimeType}，约 ${sizeKb}KB）",
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
 /**
- * 轻量 Markdown 渲染：只处理代码块与行内换行，避免引入完整 Markdown 依赖。
+ * 轻量 Markdown 渲染：只处理代码块、行内换行与可点链接。
+ *
+ * 链接用 [LinkAnnotation.Url] 标出来，点一下交给系统处理（浏览器、地图、拨号盘都算）。
  */
 @Composable
 fun MarkdownishText(text: String, color: Color) {
     val segments = androidx.compose.runtime.remember(text) { splitCodeBlocks(text) }
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    // 模型写出来的网址不一定合法，交给系统时抛异常不能把 App 带崩
+    val openUri: (String) -> Unit = { url ->
+        runCatching { uriHandler.openUri(url) }.onFailure {
+            Toast.makeText(context, "没有应用能打开这个链接", Toast.LENGTH_SHORT).show()
+        }
+    }
     Column {
         segments.forEach { seg ->
             if (seg.isCode) {
@@ -436,13 +485,58 @@ fun MarkdownishText(text: String, color: Color) {
                 }
             } else {
                 Text(
-                    seg.text,
+                    text = linkify(seg.text, openUri),
                     style = MaterialTheme.typography.bodyMedium,
                     color = color,
                     modifier = Modifier.padding(vertical = 2.dp),
                 )
             }
         }
+    }
+}
+
+/**
+ * 把文本里的网址变成可点的链接。
+ *
+ * 结尾的标点要摘出来：中文句子里「看这里 https://a.com/x，然后」的逗号不算网址的一部分，
+ * 括号同理，`https://a.com/x_(y)` 的右括号也不该跟着进去。
+ */
+private val URL_PATTERN = Regex("""https?://[^\s<>"'】]+""")
+
+/** 网址结尾一般不带这些字符。 */
+private const val TRAILING_PUNCTUATION = ".,;:!?，。、；：！？)）】]》」』\"'"
+
+private fun linkify(text: String, onUri: (String) -> Unit): AnnotatedString = buildAnnotatedString {
+    var index = 0
+    URL_PATTERN.findAll(text).forEach { match ->
+        if (match.range.first > index) {
+            append(text.substring(index, match.range.first))
+        }
+        val matched = match.value
+        val trailing = matched.takeLastWhile { it in TRAILING_PUNCTUATION }
+        val url = matched.removeSuffix(trailing)
+        val start = length
+        append(url)
+        addLink(
+            LinkAnnotation.Url(
+                url = url,
+                styles = TextLinkStyles(
+                    style = SpanStyle(
+                        color = Color(0xFF1A73E8),
+                        textDecoration = TextDecoration.Underline,
+                    ),
+                ),
+                linkInteractionListener = { onUri(url) },
+            ),
+            start,
+            length,
+        )
+        // 摘掉的标点原样还回去，摆在链接外面
+        append(trailing)
+        index = match.range.last + 1
+    }
+    if (index < text.length) {
+        append(text.substring(index))
     }
 }
 

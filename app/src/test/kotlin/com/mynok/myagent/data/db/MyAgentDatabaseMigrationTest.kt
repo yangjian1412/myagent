@@ -16,10 +16,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * v6 → v7 迁移的验证。
+ * v6 → v7、v7 → v8 迁移的验证。
  *
  * 重点：会话 / 消息这些老数据必须原样保留，
- * 技能表按约定重建（不迁移旧行），定时任务表建出来。
+ * 技能表按约定重建（不迁移旧行），定时任务表建出来；
+ * v8 只是给模型档案加一列，档案内容不能动。
  *
  * 这里手工用 SQL 造一个真正的 v6 库（Room 会按当前实体建表，
  * 没法直接造出旧结构的库）。
@@ -75,9 +76,27 @@ class MyAgentDatabaseMigrationTest {
                 VALUES ('old', '旧技能', '旧描述', '旧正文', '', 0)
                 """.trimIndent(),
             )
+            // 一个 v6 时代的模型档案：升 v8 加列之后老字段不该被动过
+            db.execSQL(
+                """
+                INSERT INTO model_profiles
+                (id, name, providerType, baseUrl, modelId, secretId, headersJson, supportsTools,
+                 supportsVision, supportsStreaming, contextWindow, maxOutputTokens, temperature,
+                 topP, reasoningLevels, extraBodyJson, builtin, sortOrder)
+                VALUES ('p-old', '旧档案', 'OPENAI_COMPAT', 'https://example.com', 'gpt-4o', NULL,
+                        '{}', 1, 1, 1, 128000, 4096, NULL, NULL, '', '{}', 0, 0)
+                """.trimIndent(),
+            )
         }
         helper.close()
     }
+
+    /** 打开这个库，把缺的版本一路升上来。 */
+    private fun openMigrated(): MyAgentDatabase = Room
+        .databaseBuilder(context, MyAgentDatabase::class.java, dbName)
+        .addMigrations(MyAgentDatabase.MIGRATION_6_7, MyAgentDatabase.MIGRATION_7_8)
+        .allowMainThreadQueries()
+        .build()
 
     private fun createV6Schema(db: androidx.sqlite.db.SupportSQLiteDatabase) {
         db.execSQL(
@@ -156,10 +175,7 @@ class MyAgentDatabaseMigrationTest {
     fun `v6 database migrates to v7 keeping conversation data`() = runBlocking {
         createV6Database()
 
-        val v7 = Room.databaseBuilder(context, MyAgentDatabase::class.java, dbName)
-            .addMigrations(MyAgentDatabase.MIGRATION_6_7)
-            .allowMainThreadQueries()
-            .build()
+        val v7 = openMigrated()
 
         // 老会话原样保留，包括步数
         val conversations = v7.conversationDao().getAll()
@@ -204,10 +220,7 @@ class MyAgentDatabaseMigrationTest {
     @Test
     fun `messages survive the migration`() = runBlocking {
         createV6Database()
-        val v7 = Room.databaseBuilder(context, MyAgentDatabase::class.java, dbName)
-            .addMigrations(MyAgentDatabase.MIGRATION_6_7)
-            .allowMainThreadQueries()
-            .build()
+        val v7 = openMigrated()
         v7.messageDao().upsert(
             MessageEntity(
                 id = "m1",
@@ -220,5 +233,24 @@ class MyAgentDatabaseMigrationTest {
         )
         assertEquals(1, v7.messageDao().getAll("conv-1").size)
         v7.close()
+    }
+
+    @Test
+    fun `v8 adds file input flag without touching old profiles`() = runBlocking {
+        createV6Database()
+        val db = openMigrated()
+
+        val old = db.modelProfileDao().get("p-old")
+        assertNotNull(old)
+        // 老档案原有字段一个都不该变
+        assertEquals("旧档案", old!!.name)
+        assertEquals("gpt-4o", old.modelId)
+        assertEquals(true, old.supportsVision)
+        assertEquals(128_000, old.contextWindow)
+        // 新加的这列默认按「不支持文档输入」起步：
+        // 与其发一个会被服务端 400 拒掉的请求，不如拦住并提示换模型
+        assertEquals(false, old.supportsFileInput)
+
+        db.close()
     }
 }

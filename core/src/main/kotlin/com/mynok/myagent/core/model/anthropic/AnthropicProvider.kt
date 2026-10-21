@@ -2,6 +2,7 @@ package com.mynok.myagent.core.model.anthropic
 
 import com.mynok.myagent.core.model.ChatMessage
 import com.mynok.myagent.core.model.ContentPart
+import com.mynok.myagent.core.model.ContentParts.asTextContent
 import com.mynok.myagent.core.model.FinishReason
 import com.mynok.myagent.core.model.ModelEvent
 import com.mynok.myagent.core.model.ModelException
@@ -329,7 +330,29 @@ class AnthropicProvider(
                     },
                 )
 
-                is ContentPart.File -> add(textBlock("[附件 ${part.name} (${part.mimeType})]"))
+                is ContentPart.File -> {
+                    // 文本类附件转成文本块：所有模型都能读，也更省 token
+                    val asText = part.asTextContent()
+                    if (asText != null) {
+                        add(textBlock(asText))
+                    } else {
+                        add(
+                            buildJsonObject {
+                                put("type", "document")
+                                put(
+                                    "source",
+                                    buildJsonObject {
+                                        put("type", "base64")
+                                        put("media_type", part.mimeType)
+                                        put("data", part.base64)
+                                    },
+                                )
+                                // 文件名对模型判断内容有帮助（Anthropic 会把它当 context）
+                                put("title", part.name)
+                            },
+                        )
+                    }
+                }
             }
         }
         if (message.role == Role.ASSISTANT) {

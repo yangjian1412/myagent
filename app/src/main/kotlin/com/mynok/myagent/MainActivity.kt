@@ -36,8 +36,17 @@ class MainActivity : ComponentActivity() {
 
     private var pendingTreeCallback: ((List<Uri>) -> Unit)? = null
     private var pendingImageCallback: ((Uri) -> Unit)? = null
+    private var pendingFileCallback: ((Uri) -> Unit)? = null
     private var pendingSkillDirCallback: ((Uri) -> Unit)? = null
     private var pendingPhotoUri: Uri? = null
+
+    private val fileLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        val cb = pendingFileCallback
+        pendingFileCallback = null
+        if (uri != null) cb?.invoke(uri)
+    }
 
     /** 通知要求打开的会话 id；Compose 里读它来跳转。 */
     private val pendingConversationId = androidx.compose.runtime.mutableStateOf<String?>(null)
@@ -105,6 +114,12 @@ class MainActivity : ComponentActivity() {
     fun requestImage(callback: (Uri) -> Unit) {
         pendingImageCallback = callback
         imageLauncher.launch("image/*")
+    }
+
+    /** 让用户选一个文件（PDF、代码、文档等）。 */
+    fun requestFile(callback: (Uri) -> Unit) {
+        pendingFileCallback = callback
+        fileLauncher.launch(arrayOf("*/*"))
     }
 
     /** 让用户选一个目录作为技能存放位置。 */

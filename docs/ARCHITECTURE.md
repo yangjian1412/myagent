@@ -18,7 +18,7 @@ mobile-agent/
 
 | 包 | 职责 |
 |---|---|
-| `core.model` | 模型档案、协议适配器、SSE 解析、思考强度、模型目录探测 |
+| `core.model` | 模型档案、协议适配器、SSE 解析、思考强度、模型目录探测、附件内容分流（`ContentParts`） |
 | `core.agent` | `AgentLoop`：请求 → 工具调用 → 结果回灌 → 再请求的闭环 |
 | `core.context` | 消息树、上下文裁剪与摘要 |
 | `core.tools` | 工具抽象、注册表、风险分级、审批接口、内置工具 |
@@ -38,7 +38,7 @@ mobile-agent/
 `ModelProfile` 描述"一个可用的模型"：
 
 - 连接：`providerType`（`OPENAI_COMPAT` / `ANTHROPIC` / `GEMINI`）、`baseUrl`、`modelId`、`secretId`
-- 能力：`supportsTools`、`supportsVision`、`supportsStreaming`
+- 能力：`supportsTools`、`supportsVision`、`supportsFileInput`、`supportsStreaming`
 - 限制：`contextWindow`、`maxOutputTokens`
 - 采样：`temperature`、`topP`、`extraBody`（原样透传的额外字段）
 - 思考：`reasoningEfforts`（该模型支持的强度等级列表）
@@ -81,6 +81,24 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
    - OpenRouter `GET /api/v1/models` → 额外有 `context_length`、`top_provider.max_completion_tokens`、`architecture.input_modalities`、`supported_parameters`
 2. **服务端不给的按模型名猜**（`ModelPresets`）：`gpt-5*`、`o3/o4`、`claude*`、`gemini-2.5-*`、`deepseek-r1`、`qwen*` 等有预设表，填进去后用户仍可改。
 3. **兜底**：界面上的上下文窗口 / 最大输出始终可手填，保存的是用户看到的值。
+
+### 2.5 附件的编码
+
+图片早已有之，这一版加了文件。规则是**按内容分流，而不是一律按二进制塞**：
+
+| 附件 | 编码 | 谁能读 |
+|---|---|---|
+| 文本类（代码、配置、Markdown…） | base64 解回文本，发普通文本块 | 全都行 |
+| PDF | Gemini `inlineData` / Anthropic `document` / OpenAI 兼容 `file` | 需模型档案声明支持 |
+| 其他二进制 | 同上，发不出去时降级成一句说明文本 | 看各家 |
+
+几个决定：
+
+- **文本文件转文本**由 `ContentParts.asTextContent()` 统一决定，三个适配器共用一份判断，不会出现「同一条消息在 Anthropic 那转了、Gemini 那没转」。
+- 判断顺序是**文件名与扩展名优先、MIME 兜底**：内容管理器给的类型经常是 `application/octet-stream`，等于没说。判错了也不要紧，`asTextContent()` 会按实际字节再确认一次（解不出 UTF-8 就退回文档格式）。
+- 附件在库里存的是 `ContentPart.File`（原始字节 + 文件名 + MIME），**转文本只发生在发请求的那一刻**。这样消息气泡显示的是文件名而不是被摊开的正文，而且下一轮从历史里重新发出去时结果一致——不会出现「第一轮发文本、第二轮发文档」的抖动。
+- 二进制要不要发出去由模型档案的 `supportsFileInput` 决定。默认关：本地推理服务收到 `type: "file"` 会直接 400，与其报一个看不懂的错，不如发送前就拦住并提示换模型。Gemini / Claude / OpenAI 官方的预设里是开着的。
+- Gemini 的 `inlineData` 只认有限的 MIME 白名单，白名单外的类型直接发会被拒，所以降级成一句「这个附件没发出去」的说明文本，让模型知道少了东西。
 
 ---
 
@@ -184,7 +202,7 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 |---|---|
 | `conversations` | 标题、模型、系统提示、思考强度/展示、工具调用展示、`activeLeafId`、`updatedAt` |
 | `messages` | `parentId` 树结构、角色、正文、`reasoning`、工具轨迹、附件 |
-| `model_profiles` | 模型档案（不含 key），`reasoningLevels` 为逗号分隔等级 |
+| `model_profiles` | 模型档案（不含 key），`reasoningLevels` 为逗号分隔等级，`supportsFileInput` 表示能否原样发文件 |
 | `skills` | 技能**索引**：内容以文件为准，这里存 frontmatter 元数据、启用开关、排序、来源路径 |
 | `scheduled_tasks` | 定时任务：cron、动作类型与参数、白名单、专属会话、上次/下次执行 |
 | `mcp_servers` | MCP server 配置 |
@@ -201,6 +219,7 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 | 5 | 会话加 `showToolCalls`（幂等迁移，默认显示，老会话行为不变） |
 | 6 | 会话加 `maxSteps`（单次回复最大工具轮数，默认 8，范围 4–32） |
 | 7 | `skills` 重建为文件索引表；新增 `scheduled_tasks`。会话/消息原样保留 |
+| 8 | 模型档案加 `supportsFileInput`（老档案一律按「不支持文档输入」起步，避免发出会被 400 拒掉的请求） |
 
 ### 6.2 设置
 
@@ -270,19 +289,26 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 
 对话页顶部：左上角汉堡按钮（历史）、右上角 `Tune`（对话设置）与新建。
 
-### 9.2 对话设置面板
+### 9.2 消息渲染与输入区
+
+- 气泡正文走 `MarkdownishText`：只认代码块、换行与网址，不为了这点需求引完整 Markdown 渲染库
+- 网址用 `LinkAnnotation.Url` 标成可点链接，点击交给 `LocalUriHandler`（浏览器、地图、拨号盘都算）。模型写出来的网址不一定规矩，所以结尾的中英文标点不算网址的一部分，打不开也只提示、不抛异常
+- 附件在气泡里是「文件名 + 类型 + 体积」的占位条（图片也一样），不引图片加载库
+- 输入区两个按钮：加图片、加文件；附件 chip 点一下即移除；只有附件没打字时也能发，会话标题用文件名兜底
+
+### 9.3 对话设置面板
 
 底部弹层 `ConversationSettingsSheet`：换模型、换思考强度（只列当前模型支持的档位）、是否展示思考过程、是否展示工具调用、最大步数（4–32）、上下文检查器入口。
 关闭工具调用展示后，工具结果消息、调用 chip 与实时轨迹都不再渲染，只保留模型的最终回复。
 最大步数是会话级的单次回复工具轮数上限，默认 8；调高能跑更长的工具链，代价是更多 token 与更慢的返回。
 
-### 9.3 主题
+### 9.4 主题
 
 `Theme.kt` 用 HSL 从种子色派生整套配色，不引 material-color-utilities。除了 M3 基础角色外，还显式提供
 `surfaceDim / surfaceBright / surfaceContainerLowest…Highest`——底部导航栏、抽屉、卡片都靠这些容器色，
 缺了它们会退回 Material 默认紫，表现为"底色不跟主题色"。
 
-### 9.4 断点
+### 9.5 断点
 
 自定义断点：600dp（手机/平板）、840dp（平板/宽屏），不依赖 material3-adaptive。
 
@@ -298,7 +324,7 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 
 | 取舍 | 原因 |
 |---|---|
-| `core` 纯 JVM | 协议逻辑、cron、技能解析都能脱离设备快速回归；目前 166 项单测 |
+| `core` 纯 JVM | 协议逻辑、cron、技能解析都能脱离设备快速回归；目前 `:core:test` 182 项、`:app:testDebugUnitTest` 14 项 |
 | 自研 SSE / MCP | 需要精确控制流式增量与审批时机，第三方库封装过深 |
 | 消息树而非线性列表 | 编辑与重生成必须保留旧分支，否则用户无法回溯 |
 | 思考档位写在模型档案 | 各家档位不一致，全局枚举无法表达 |
@@ -308,3 +334,5 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 | 自研 cron 解析 | 5 段表达式的语义很固定，引库反而增加体积和升级风险 |
 | 定时任务用 AlarmManager 而非 WorkManager | 需要精确到分钟；WorkManager 有最小间隔与系统调度抖动 |
 | 后台审批用白名单预授权 | 无人值守时弹不出确认框；破坏性操作仍然一律拒绝 |
+| 文本附件转文本、PDF 原样发 | 一律按二进制塞既费 token 又容易读不准，一律抽文本又没地方放 PDF；按内容分流各取其长 |
+| 附件按 base64 存进消息 | 与图片同一套做法，重发历史时不必再去找那个文件；代价是大附件会撑大库 |

@@ -1,6 +1,6 @@
 # MyAgent
 
-Android 手机端的 AI Agent Harness：本地模型与在线模型自由切换，支持工具调用、MCP、多会话分支与多模态识图。
+Android 手机端的 AI Agent Harness：本地模型与在线模型自由切换，支持工具调用、MCP、多会话分支、图片与文件附件。
 
 - 版本：`0.1.0`
 - 包名：`com.mynok.myagent`
@@ -15,6 +15,7 @@ Android 手机端的 AI Agent Harness：本地模型与在线模型自由切换�
 - 本地 Ollama / LM Studio / llama.cpp / strata 等，只要兼容 OpenAI 协议即可接入
 - 流式输出；思考过程可折叠，也可一键隐藏
 - 思考强度按模型档案声明（低 / 中 / 高），不支持的档位不会出现在界面上
+- 每个模型档案自己声明是否支持识图、是否支持文档输入，界面上只按声明的能力发请求
 
 **Agent 与工具**
 - 内置工具：`web_search`（Bing / DuckDuckGo / Tavily / Brave）、`web_fetch`、`http_request`、`notion`
@@ -32,6 +33,15 @@ Android 手机端的 AI Agent Harness：本地模型与在线模型自由切换�
 - 对话页的技能 chip 仍然可用：手动点选的技能正文会直接进系统提示，优先级最高
 - 模型可以用 `skill_write` 把可复用的做法沉淀成新技能
 - 兼容 ClawHub 的 `metadata.openclaw.*`：`requires.env` 提示需要哪个集成密钥，`os` 不匹配时标记为平台不支持
+
+**附件**
+- 发图片：压缩到长边 1568 像素再发，三家协议都走各自的图片格式
+- 发文件：代码、配置、Markdown 这类文本文件直接读出正文发送，任何模型都读得懂，也省 token
+- PDF 按原始文件发给模型（Gemini 用 `inlineData`、Anthropic 用 `document` 块、OpenAI 兼容用 `file` 内容块）
+- PDF 这类二进制要求模型档案打开「文档输入」才发得出去；没打开会直接提示换模型，而不是发一个会被服务端 400 拒掉的请求
+- 本地推理服务（Ollama、LM Studio）通常不支持文档输入；Office 文档（docx / xlsx）暂时读不出内容，界面上会提前说明
+- 单个附件上限 8 MB；文本附件超过 12 万字符会截断并注明
+- 助手回复里的网址变成可点链接，点开交给系统（浏览器、地图、拨号盘都算）
 
 **会话**
 - 多会话、历史抽屉、长按删除
@@ -116,8 +126,8 @@ mobile-agent/
 ## 测试
 
 ```bash
-./gradlew :core:test              # 纯 JVM 单元测试，153 项
-./gradlew :app:testDebugUnitTest  # app 层：DB 迁移、任务 payload，13 项
+./gradlew :core:test              # 纯 JVM 单元测试，182 项
+./gradlew :app:testDebugUnitTest  # app 层：DB 迁移、任务 payload，14 项
 ```
 
 端到端联调（工具调用 → 审批 → 回灌 → 最终回复）：

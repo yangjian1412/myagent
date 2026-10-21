@@ -41,13 +41,15 @@ print('core tests:',t,'failed:',f)
 | `ModelCatalogTest` | 三家 `/models` 解析、上限字段提取、OpenRouter 能力字段、错误转 `Failure` |
 | `ModelPresetsTest`（含在上一类） | 按模型名猜上下文/输出/思考档位、未知模型返回 null |
 | `CalendarToolsTest`（app） | 日历时间参数的 ISO / 时区 / 本地时间 / 日期 / epoch 秒与毫秒解析 |
-| `MyAgentDatabaseMigrationTest`（app） | 用真实 v6 库跑 6→7 迁移：会话/步数/消息保留，旧技能不迁移，新表可写 |
+| `MyAgentDatabaseMigrationTest`（app） | 用真实 v6 库跑 6→7→8 迁移：会话/步数/消息保留，旧技能不迁移，新表可写，v8 新列默认「不支持文档输入」且老档案字段不动 |
 | `TaskPayloadTest`（app） | 三种动作的 payload 结构约定 |
 | `SkillParserTest` | frontmatter 解析、缺 name 回落目录名、`allowed-tools`、ClawHub `metadata.openclaw`、坏 YAML 只记 warning、CRLF、无 frontmatter |
 | `SkillCatalogTest` | 目录块渲染、字符预算裁剪、XML 转义、工具/密钥提示 |
 | `CronExpressionTest` | 5 段解析、步长/区间/列表、英文月份与星期、日周并集、非法表达式、时区、下一次计算、UI 构建器 |
+| `ContentPartsTest` | 附件「算不算文本」的判断：MIME 带参数、扩展名优先、无扩展名的 Makefile、非法 UTF-8 字节退回文档格式、超长截断 |
+| `FileAttachmentEncodingTest` | 同一条带附件的消息在三个协议里的报文：文本附件转文本块、PDF 分别走 `file` / `document` / `inlineData`、Gemini 白名单外降级成说明文本 |
 
-当前结果：`:core:test` 153 项、`:app:testDebugUnitTest` 13 项，共 166 项，0 失败。
+当前结果：`:core:test` 182 项、`:app:testDebugUnitTest` 14 项，共 196 项，0 失败。
 
 ### 1.3 断言原则
 
@@ -201,13 +203,24 @@ adb -s 2944a134 pull /sdcard/s.png C:\Users\mynok\AppData\Local\Temp\opencode\sh
 | I14 | 重启手机 | 到点仍能触发（`BOOT_COMPLETED` 重排） |
 | I15 | 填非法 cron（如 `70 8 * * *`） | 列表标「表达式无效」，不会崩 |
 
-#### J. 多模态
+#### J. 多模态与附件
 
 | 编号 | 步骤 | 期望 |
 |---|---|---|
 | J1 | 选支持识图的模型 → 发图 + 提问 | 图片以 base64/URL 正确编码，模型能描述内容 |
 | J2 | 对不支持识图的模型发图 | 明确提示该模型不支持，或自动降级为仅文本 |
 | J3 | 大图（>4MB） | 压缩后再上传，不 OOM |
+| J4 | 点「添加文件」选一个代码文件（`.kt` / `.py`） | 输入区出现带文件名的 chip，chip 上的图标是文档而不是图片 |
+| J5 | 发这个代码文件 + 提问「这段代码做了什么」 | 模型能复述代码内容；气泡里显示文件名占位条，**不会**把整段代码摊在气泡正文里 |
+| J6 | 发一个中文名的 `.txt`（例如 `会议纪要.txt`） | 中文不乱码，模型能引用原文 |
+| J7 | 发一个 PDF（模型档案已开「文档输入」） | 模型能回答文档里的问题；Gemini 走 `inlineData`、Anthropic 走 `document`、OpenAI 兼容走 `file` |
+| J8 | 同一个 PDF 发给没开「文档输入」的模型（如 Ollama） | 发送被拦住并提示换模型或去「模型 → 模型配置」打开开关，**不发**会被 400 拒掉的请求 |
+| J9 | 点 chip 删掉附件后再发 | 只剩文字，不带附件 |
+| J10 | 只选附件不打字 | 「发送」按钮可用；发出去会话标题用文件名 |
+| J11 | 发一个超过 8MB 的文件 | 直接提示太大，不读卡死 |
+| J12 | 发一个 docx / xlsx | 提前说明这类文件模型多半读不出内容（不是崩溃） |
+| J13 | 同一个附件继续追问第二轮 | 历史里的编码方式与第一轮一致（文本仍是文本、PDF 仍是文档），不报错 |
+| J14 | 发一个空文件 | 提示文件里没有内容 |
 
 #### K. 平板
 
@@ -246,6 +259,16 @@ adb -s 2944a134 shell wm density reset
 | L12 | 授予麦克风权限后录 3 秒 | 生成 `.m4a` 文件，返回路径与大小；模型明确说明自己不能直接听 |
 | L13 | 打开「模型 → 工具 → 系统权限」 | 显示日历/联系人/定位/电话/麦克风/通知状态；授权后状态刷新；系统设置入口可用 |
 
+#### M. 链接与文本渲染
+
+| 编号 | 步骤 | 期望 |
+|---|---|---|
+| M1 | 让模型回复一个网址（或让它列几个带链接的结果） | 网址是蓝色带下划线，点一下交给系统打开（浏览器 / 地图 / 拨号盘都算） |
+| M2 | 中文句子里的链接后面紧跟「，」「。」或右括号 | 标点不算进网址，链接仍然能打开（`https://a.com/x_(y)` 的右括号同理） |
+| M3 | 网址出现在代码块里 | 代码块里的内容不当链接、不可点，保持等宽原样 |
+| M4 | 模型编出一个没应用能打开的 scheme | 提示「没有应用能打开这个链接」，App 不崩 |
+| M5 | 长按链接所在文本 | 文本仍然可以正常选中复制，链接没把整段变成按钮 |
+
 ---
 
 ## 3. 端到端（mock 服务）
@@ -275,6 +298,10 @@ adb -s 2944a134 reverse tcp:18080 tcp:18080
 | 强制停止 | 在系统设置里"强行停止"App 后所有闹钟失效，下次手动打开 App 才会重排 |
 | 技能目录 | SAF 目录必须用户授权一次，App 不能静默在公共目录建文件夹 |
 | 技能里的命令行 | ClawHub 技能的 `requires.bins` / `scripts/` 在手机上不执行，只能读正文和 `references/` |
+| PDF 抽文本 | Android 自带的 `PdfRenderer` 只能把页渲染成图，抽不出文字。所以 PDF 只能原样发给支持的模型，不支持文档输入的模型就没有办法读它（图片化再 OCR 代价太大，没做） |
+| Office 文档 | docx / xlsx / pptx 本质是压缩包，模型认不出来；当前也不为读文档引解压与解析库 |
+| OpenAI 兼容的 `file` 块 | 只有 OpenAI 官方等少数实现支持，本地推理服务基本不支持，所以「文档输入」默认关闭、需要手动打开 |
+| 附件存库 | 附件按 base64 存在消息里（与图片同一路子），所以 8MB 的上限同时也是数据库体积上限 |
 
 ---
 
@@ -282,8 +309,8 @@ adb -s 2944a134 reverse tcp:18080 tcp:18080
 
 发布前必须满足：
 
-1. `:core:test` 全绿（当前 153 项）；
-2. `:app:testDebugUnitTest` 全绿（当前 13 项），含 v6→v7 迁移；
+1. `:core:test` 全绿（当前 182 项）；
+2. `:app:testDebugUnitTest` 全绿（当前 14 项），含 v6→v7→v8 迁移；
 3. `:app:assembleDebug` 无 error；
-4. A1–A6、B1–B3、C1–C3、D1–D4、E2–E3、S1–S4、H3–H9、I1–I2 手工通过；
+4. A1–A6、B1–B3、C1–C3、D1–D4、E2–E3、S1–S4、H3–H9、I1–I2、J4–J8、J13、M1–M4 手工通过；
 5. 冷启动无 `FATAL EXCEPTION`，`adb logcat` 中无 Room schema 校验失败。

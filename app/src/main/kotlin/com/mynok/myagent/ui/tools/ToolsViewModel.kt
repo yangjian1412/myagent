@@ -8,6 +8,7 @@ import com.mynok.myagent.core.tools.ToolRisk
 import com.mynok.myagent.core.tools.ToolSecretKeys
 import com.mynok.myagent.data.db.McpServerEntity
 import com.mynok.myagent.data.db.SkillEntity
+import com.mynok.myagent.data.skills.SkillTemplates
 import com.mynok.myagent.di.AppContainer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +41,10 @@ data class ToolsUiState(
     val builtIn: List<ToolEntry> = emptyList(),
     val mcpServers: List<McpServerEntity> = emptyList(),
     val skills: List<SkillEntity> = emptyList(),
+    /** 是否已经授权技能目录。 */
+    val skillDirectoryBound: Boolean = false,
+    /** 技能目录的显示名。 */
+    val skillDirectoryName: String = "",
     /** 已配置的集成密钥（只存键名，不把密钥读回界面）。 */
     val configuredSecrets: Set<String> = emptySet(),
     val message: String? = null,
@@ -64,8 +69,16 @@ class ToolsViewModel(
             }
         }
         viewModelScope.launch {
-            repo.observeSkills().collect { skills ->
+            container.skillRepository.observeAll().collect { skills ->
                 _state.update { it.copy(skills = skills) }
+            }
+        }
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    skillDirectoryBound = container.skillRepository.isDirectoryBound(),
+                    skillDirectoryName = container.skillRepository.directoryName(),
+                )
             }
         }
         loadSecrets()
@@ -107,26 +120,79 @@ class ToolsViewModel(
 
     // ------------------------------------------------------------ 技能
 
-    fun saveSkill(id: String?, name: String, description: String, prompt: String, forceTools: String) {
+    /**
+     * 绑定技能目录（用户在系统文件选择器里选的目录）。
+     */
+    fun bindSkillDirectory(uri: android.net.Uri) {
         viewModelScope.launch {
-            val skillId = id ?: "skill-${UUID.randomUUID()}"
-            repo.upsertSkill(
-                SkillEntity(
-                    id = skillId,
-                    name = name.ifBlank { "未命名技能" },
-                    description = description,
-                    prompt = prompt,
-                    forceTools = forceTools.trim(),
-                    sortOrder = _state.value.skills.size,
-                ),
-            )
-            _state.update { it.copy(message = "已保存技能「${name.ifBlank { "未命名技能" }}」") }
+            val ok = container.skillRepository.bindDirectory(uri)
+            _state.update {
+                it.copy(
+                    skillDirectoryBound = ok,
+                    skillDirectoryName = container.skillRepository.directoryName(),
+                    message = if (ok) {
+                        "技能目录已设置为「${container.skillRepository.directoryName()}」"
+                    } else {
+                        "技能目录设置失败"
+                    },
+                )
+            }
         }
     }
 
+    /** 重新扫描技能目录（用户在文件管理器里改过之后）。 */
+    fun rescanSkills() {
+        viewModelScope.launch {
+            val count = container.skillRepository.syncFromFiles()
+            _state.update {
+                it.copy(
+                    message = "已重新扫描，找到 $count 个技能文件",
+                    skillDirectoryBound = container.skillRepository.isDirectoryBound(),
+                )
+            }
+        }
+    }
+
+    /**
+     * 从模板创建一个技能（写进技能目录）。
+     */
+    fun createFromTemplate(slug: String) {
+        viewModelScope.launch {
+            val template = SkillTemplates.all.firstOrNull { it.slug == slug }
+            if (template == null) return@launch
+            if (!container.skillRepository.isDirectoryBound()) {
+                _state.update { it.copy(message = "请先选择技能目录") }
+                return@launch
+            }
+            val ok = container.skillRepository.writeSkillFile(
+                template.slug,
+                SkillTemplates.toSkillFile(template),
+            )
+            if (!ok) {
+                _state.update { it.copy(message = "写入技能文件失败") }
+                return@launch
+            }
+            container.skillRepository.syncFromFiles()
+            _state.update { it.copy(message = "已创建技能「${template.name}」") }
+        }
+    }
+
+    /** 启用 / 停用某个技能。 */
+    fun setSkillEnabled(id: String, enabled: Boolean) {
+        viewModelScope.launch {
+            container.skillRepository.setEnabled(id, enabled)
+        }
+    }
+
+    /** 删除技能（文件来源的会连文件一起删）。 */
     fun deleteSkill(id: String) {
         viewModelScope.launch {
-            repo.deleteSkill(id)
+            val skill = container.skillRepository.get(id)
+            if (skill != null && skill.source == SkillEntity.SOURCE_FILE) {
+                container.skillRepository.deleteSkillFile(skill.sourceDir)
+            } else {
+                container.skillRepository.delete(id)
+            }
             _state.update { it.copy(message = "已删除技能") }
         }
     }

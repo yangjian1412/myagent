@@ -36,7 +36,19 @@ class MainActivity : ComponentActivity() {
 
     private var pendingTreeCallback: ((List<Uri>) -> Unit)? = null
     private var pendingImageCallback: ((Uri) -> Unit)? = null
+    private var pendingSkillDirCallback: ((Uri) -> Unit)? = null
     private var pendingPhotoUri: Uri? = null
+
+    /** 通知要求打开的会话 id；Compose 里读它来跳转。 */
+    private val pendingConversationId = androidx.compose.runtime.mutableStateOf<String?>(null)
+
+    private val skillDirLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        val cb = pendingSkillDirCallback
+        pendingSkillDirCallback = null
+        if (uri != null) cb?.invoke(uri)
+    }
 
     private val photoLauncher = registerForActivityResult(
         ActivityResultContracts.TakePicture(),
@@ -46,10 +58,17 @@ class MainActivity : ComponentActivity() {
         pendingPhotoUri = null
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { pendingConversationId.value = it }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         pendingPhotoUri = savedInstanceState?.getString(KEY_PENDING_PHOTO)?.let(Uri::parse)
+        pendingConversationId.value = intent?.getStringExtra(EXTRA_CONVERSATION_ID)
         val container = (application as MyAgentApp).container
         container.mediaCapture.attach { uri ->
             pendingPhotoUri = uri
@@ -67,7 +86,10 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    MyAgentRoot(container)
+                    MyAgentRoot(
+                        container = container,
+                        initialConversationId = pendingConversationId.value,
+                    )
                 }
             }
         }
@@ -85,6 +107,12 @@ class MainActivity : ComponentActivity() {
         imageLauncher.launch("image/*")
     }
 
+    /** 让用户选一个目录作为技能存放位置。 */
+    fun requestSkillDirectory(callback: (Uri) -> Unit) {
+        pendingSkillDirCallback = callback
+        skillDirLauncher.launch(null)
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         pendingPhotoUri?.let { outState.putString(KEY_PENDING_PHOTO, it.toString()) }
@@ -98,7 +126,10 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    private companion object {
-        const val KEY_PENDING_PHOTO = "pending_photo_uri"
+    companion object {
+        /** 通知里带的会话 id，点通知直接进那个会话。 */
+        const val EXTRA_CONVERSATION_ID = "conversation_id"
+
+        private const val KEY_PENDING_PHOTO = "pending_photo_uri"
     }
 }

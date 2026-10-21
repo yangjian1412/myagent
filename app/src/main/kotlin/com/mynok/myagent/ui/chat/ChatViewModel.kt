@@ -12,6 +12,7 @@ import com.mynok.myagent.core.model.ChatMessage
 import com.mynok.myagent.core.model.ContentPart
 import com.mynok.myagent.core.model.ReasoningEffort
 import com.mynok.myagent.core.model.Role
+import com.mynok.myagent.core.skills.SkillCatalog
 import com.mynok.myagent.core.tools.ToolResult
 import com.mynok.myagent.data.db.ModelProfileEntity
 import com.mynok.myagent.di.AppContainer
@@ -42,7 +43,9 @@ private const val DEVICE_CAPABILITIES = "你运行在 Android 手机上。工具
     "经用户授权后可以读写日历、搜索联系人、获取位置、拨打电话。" +
     "无法读取通知、无法模拟点击或操作其他 App 的界面、无法直接修改系统设置。" +
     "日历、联系人和位置信息会随工具结果发给当前模型；做不到时直接说明原因和建议，" +
-    "不要反复调用工具，也不要擅自打开系统设置页。"
+    "不要反复调用工具，也不要擅自打开系统设置页。" +
+    "技能（skill）是可以复用的操作说明：需要某个技能时用 skill_read 读它的正文，" +
+    "也可以用 skill_write 把可复用的做法沉淀成新技能。"
 
 /** 一次工具调用的可视化记录。 */
 data class ToolTrace(
@@ -104,6 +107,7 @@ class ChatViewModel(
 ) : ViewModel() {
 
     private val repo = container.repository
+    private val skillRepo = container.skillRepository
 
     private val _state = MutableStateFlow(ChatUiState())
     val state: StateFlow<ChatUiState> = _state.asStateFlow()
@@ -134,7 +138,7 @@ class ChatViewModel(
             }
         }
         viewModelScope.launch {
-            repo.observeSkills().collect { skills ->
+            skillRepo.observeAll().collect { skills ->
                 _state.update { s ->
                     s.copy(
                         skills = skills,
@@ -395,12 +399,18 @@ class ChatViewModel(
         val profile = repo.toProfile(profileEntity)
         // Agent 身份与长期偏好来自设置页，每次都现取，改完下一次发送即生效
         val appSettings = container.settingsStore.settings.first()
-        // 技能 = 额外系统提示 + 可选的工具白名单
+        // 技能 = 用户手动点名的技能（正文直接进系统提示）+ 全部启用技能的目录（模型按需读取）
         val skill = _state.value.activeSkill
+        val catalog = SkillCatalog.render(skillRepo.enabledDefinitions())
         val system = SystemPrompt.build(
             agentName = appSettings.agentName,
             preferences = appSettings.agentPreferences,
-            extraPrompts = listOf(DEVICE_CAPABILITIES, _state.value.systemPrompt, skill?.prompt),
+            extraPrompts = listOf(
+                DEVICE_CAPABILITIES,
+                _state.value.systemPrompt,
+                catalog,
+                skill?.prompt,
+            ),
         )
         val allowedTools = skill?.forceTools
             ?.split(',')

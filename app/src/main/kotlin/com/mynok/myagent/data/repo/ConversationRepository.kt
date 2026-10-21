@@ -277,13 +277,5 @@ class ConversationRepository(
 
     suspend fun enabledMcpServers(): List<McpServerEntity> = mcpDao.getEnabled()
 
-    // ------------------------------------------------------------ 技能
-
-    fun observeSkills(): Flow<List<com.mynok.myagent.data.db.SkillEntity>> = db.skillDao().observeAll()
-
-    suspend fun upsertSkill(skill: com.mynok.myagent.data.db.SkillEntity) = db.skillDao().upsert(skill)
-
-    suspend fun deleteSkill(id: String) = db.skillDao().delete(id)
-
-    suspend fun getSkill(id: String): com.mynok.myagent.data.db.SkillEntity? = db.skillDao().get(id)
+    // 技能改由 SkillRepository 管理（内容以文件为准），这里不再留入口。
 }

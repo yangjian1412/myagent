@@ -173,9 +173,40 @@ interface SkillDao {
     @Query("SELECT * FROM skills WHERE id = :id")
     suspend fun get(id: String): SkillEntity?
 
+    @Query("SELECT * FROM skills WHERE enabled = 1 ORDER BY sortOrder ASC, name ASC")
+    fun observeEnabled(): Flow<List<SkillEntity>>
+
+    @Query("SELECT * FROM skills WHERE enabled = 1")
+    suspend fun getEnabled(): List<SkillEntity>
+
+    @Query("SELECT * FROM skills WHERE source = 'FILE'")
+    suspend fun getFileSkills(): List<SkillEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(skill: SkillEntity)
 
     @Query("DELETE FROM skills WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM skills WHERE source = 'FILE'")
+    suspend fun deleteFileSkills()
+}
+
+@Dao
+interface ScheduledTaskDao {
+
+    @Query("SELECT * FROM scheduled_tasks ORDER BY createdAt ASC")
+    fun observeAll(): Flow<List<ScheduledTaskEntity>>
+
+    @Query("SELECT * FROM scheduled_tasks WHERE id = :id")
+    suspend fun get(id: String): ScheduledTaskEntity?
+
+    @Query("SELECT * FROM scheduled_tasks WHERE enabled = 1")
+    suspend fun getEnabled(): List<ScheduledTaskEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(task: ScheduledTaskEntity)
+
+    @Query("DELETE FROM scheduled_tasks WHERE id = :id")
     suspend fun delete(id: String)
 }

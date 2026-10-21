@@ -16,6 +16,7 @@ documentfile = "1.0.1"
 coroutines = "1.11.0"
 serialization = "1.12.0"
 okhttp = "4.12.0"
+kaml = "0.104.0"
 
 junit = "4.13.2"
 turbine = "1.2.1"
@@ -63,6 +64,7 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+kaml = { group = "com.charleskorn.kaml", name = "kaml", version.ref = "kaml" }
 
 # --- 测试 ---
 junit = { group = "junit", name = "junit", version.ref = "junit" }

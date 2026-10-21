@@ -1,6 +1,6 @@
 # MyAgent 架构说明
 
-版本：`0.1.0beta4`　包名：`com.mynok.myagent`
+版本：`0.1.0`　包名：`com.mynok.myagent`
 
 手机端 AI Agent harness。核心目标：**本地模型与在线模型可自由切换**，具备工具调用、MCP 接入、会话分支、多模态识图能力，并尽量把可测逻辑放进纯 JVM 模块。
 
@@ -24,6 +24,8 @@ mobile-agent/
 | `core.tools` | 工具抽象、注册表、风险分级、审批接口、内置工具 |
 | `core.mcp` | 自研 MCP 客户端（JSON-RPC over stdio/HTTP、工具发现） |
 | `core.net` | `Http` 抽象 + OkHttp 实现，便于测试替换 |
+| `core.skills` | `SKILL.md` 解析（kaml）、技能目录渲染 |
+| `core.schedule` | 5 段 cron 表达式解析与下次触发时间计算 |
 
 `core` 不引用任何 Android API，网络与文件系统都通过接口注入（`Http`、`FileWorkspace`、`ToolApprover`），所以测试里可以直接用 `FakeHttp` 驱动完整协议逻辑。
 
@@ -183,7 +185,8 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 | `conversations` | 标题、模型、系统提示、思考强度/展示、工具调用展示、`activeLeafId`、`updatedAt` |
 | `messages` | `parentId` 树结构、角色、正文、`reasoning`、工具轨迹、附件 |
 | `model_profiles` | 模型档案（不含 key），`reasoningLevels` 为逗号分隔等级 |
-| `skills` | 技能：名称、描述、提示词、可选工具白名单 |
+| `skills` | 技能**索引**：内容以文件为准，这里存 frontmatter 元数据、启用开关、排序、来源路径 |
+| `scheduled_tasks` | 定时任务：cron、动作类型与参数、白名单、专属会话、上次/下次执行 |
 | `mcp_servers` | MCP server 配置 |
 | `tool_policies` | 每个工具的启用状态与确认策略 |
 
@@ -197,6 +200,7 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 | 4 | 模型档案加 `reasoningLevels`（幂等迁移，兼容已升到 v3 的库） |
 | 5 | 会话加 `showToolCalls`（幂等迁移，默认显示，老会话行为不变） |
 | 6 | 会话加 `maxSteps`（单次回复最大工具轮数，默认 8，范围 4–32） |
+| 7 | `skills` 重建为文件索引表；新增 `scheduled_tasks`。会话/消息原样保留 |
 
 ### 6.2 设置
 
@@ -208,49 +212,99 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 
 ---
 
-## 7. UI 结构
+## 7. 技能（文件化）
 
-### 7.1 导航
+技能不再是数据库里的一段提示词，而是**磁盘上的文件**，格式兼容 [Agent Skills](https://agentskills.io) 与 ClawHub：
+
+```
+<授权目录>/skills/
+  morning-brief/
+    SKILL.md          # 必需：YAML frontmatter + Markdown 正文
+    references/       # 可选：参考资料
+    assets/           # 可选：素材
+```
+
+- **目录授权**：`ACTION_OPEN_DOCUMENT_TREE` 授权一次，`takePersistableUriPermission` 持久化；App 在目录下建 `skills/` 子目录。之后用户可以直接用手机文件管理器增删改。
+- **扫描**：`SkillFileStore.scan()` 递归找含 `SKILL.md` 的目录（最多 3 层，支持分组）。App 启动和用户点「重新扫描」时执行，结果同步到 `skills` 表作为索引。
+- **解析**：`core/skills/SkillParser` 用 kaml 解析 frontmatter。未知字段忽略，YAML 语法错误只记 warning 并保留正文，不整份丢弃。
+- **三层披露**
+  1. 元数据层：`SkillCatalog.render()` 生成 `<available_skills>` 块，只有名字 + 一句话说明，有字符预算，超了先砍说明再砍条目。
+  2. 正文层：模型调 `skill_read` 工具按名字取正文。
+  3. 资源层：`references/`、`assets/` 里的文件按需读取。
+- **手动 chip 仍可用**：对话页点选的技能正文会直接拼进系统提示（在目录块之后），优先级最高。
+- **模型写技能**：`skill_write` 工具校验名字（小写字母/数字/连字符，1–64 位）后写 `SKILL.md`，再触发一次扫描。
+- **ClawHub 字段映射**：`metadata.openclaw.requires.env` → 提示需要哪个集成密钥；`os` 不含 `android` → 标记平台不匹配；`requires.bins` / `install` / `scripts` → 标记不适用（手机上不能执行命令行）。
+
+`skills` 表只是索引：停用、排序、来源目录、最近扫描时间。文件被删掉后重扫即消失。
+
+---
+
+## 8. 定时任务
+
+任务 = **cron 表达式** + **动作**。
+
+- **解析**：`core/schedule/CronExpression` 自己实现 5 段 Unix cron（`*`、`a-b`、`a,b`、`*/n`、月份/星期英文缩写）。日与周同时限定时取并集（标准 cron 语义）。找不到下一次返回 null（如 2 月 30 日），不会死循环。
+- **唤醒**：`AlarmManager.setExactAndAllowWhileIdle`。Android 12+ 需要 `SCHEDULE_EXACT_ALARM`（appop，用户去系统设置开）；拿不到就退化为 `setAndAllowWhileIdle`，晚几分钟但不会不跑。
+- **执行链路**：闹钟 → `TaskAlarmReceiver`（BroadcastReceiver 只有几秒，不干重活）→ `TaskRunService`（前台服务，`dataSync` 类型）→ `TaskRunner` → 结果通知。
+- **三种动作**
+  - `NOTIFY`：直接发通知，正文支持 `{date}` / `{time}` / `{weekday}` 模板
+  - `TOOL`：预填参数调一个工具
+  - `AGENT`：用指定技能跑一次完整 AgentLoop，结果写进任务专属会话
+- **无人值守的审批**：建任务时勾选的工具组成白名单，白名单内的写操作视为已批准；`DESTRUCTIVE` 无论怎么勾都拒绝；白名单外的工具直接拒绝。因为后台没人能点确认框。
+- **专属会话**：`AGENT` 类型第一次执行时创建一个会话并写回 `conversationId`，之后每次都追加到同一个会话；通知点击带上 `EXTRA_CONVERSATION_ID` 直接跳进去。
+- **重排**：`BOOT_COMPLETED` / `MY_PACKAGE_REPLACED` 后 `BootReceiver` 重新登记所有启用的任务（系统重启会清空 AlarmManager）。App 被强制停止后任务停摆，下次启动重排。
+- **模型不能管理任务**：定时任务只在 UI 里配置，不开放工具给模型，避免模型给自己排后台任务。
+
+---
+
+## 9. UI 结构
+
+### 9.1 导航
 
 三个一级标签：**对话 / 模型 / 设置**。
 
 - 手机/窄窗口（< 840dp）：底部 `NavigationBar` + `ModalNavigationDrawer` 历史抽屉（仅对话页可手势拉出）
-- 平板/宽窗口（≥ 840dp）：`NavigationRail` + 常驻会话侧栏；「模型」页的三个子项（模型配置 / 工具 / 技能）也改为左侧常驻列表，交互与历史对话一致
+- 平板/宽窗口（≥ 840dp）：`NavigationRail` + 常驻会话侧栏；「模型」页的四个子项（模型配置 / 工具 / 技能 / 定时任务）也改为左侧常驻列表，交互与历史对话一致
+- 手机上的模型子标签用短名（配置 / 工具 / 技能 / 定时），四个全称放不下
 - 全窗口 edge-to-edge：手机分支由 `Scaffold` 的 content insets 让开系统栏，平板分支显式用 `WindowInsets.systemBars ∪ displayCutout` 处理；状态栏/导航栏图标明暗跟随 App 内主题，而不是系统深色模式
 
 对话页顶部：左上角汉堡按钮（历史）、右上角 `Tune`（对话设置）与新建。
 
-### 7.2 对话设置面板
+### 9.2 对话设置面板
 
 底部弹层 `ConversationSettingsSheet`：换模型、换思考强度（只列当前模型支持的档位）、是否展示思考过程、是否展示工具调用、最大步数（4–32）、上下文检查器入口。
 关闭工具调用展示后，工具结果消息、调用 chip 与实时轨迹都不再渲染，只保留模型的最终回复。
 最大步数是会话级的单次回复工具轮数上限，默认 8；调高能跑更长的工具链，代价是更多 token 与更慢的返回。
 
-### 7.3 主题
+### 9.3 主题
 
 `Theme.kt` 用 HSL 从种子色派生整套配色，不引 material-color-utilities。除了 M3 基础角色外，还显式提供
 `surfaceDim / surfaceBright / surfaceContainerLowest…Highest`——底部导航栏、抽屉、卡片都靠这些容器色，
 缺了它们会退回 Material 默认紫，表现为"底色不跟主题色"。
 
-### 7.4 断点
+### 9.4 断点
 
 自定义断点：600dp（手机/平板）、840dp（平板/宽屏），不依赖 material3-adaptive。
 
 ---
 
-## 8. 依赖注入
+## 10. 依赖注入
 
 手写 DI，不引 Hilt。`AppContainer` 在 `Application` 里构建一次，持有数据库、仓库、HTTP、密钥存储、设置、审批协调器；ViewModel 通过 `ViewModelProvider.Factory` 从容器取依赖。
 
 ---
 
-## 9. 关键取舍
+## 11. 关键取舍
 
 | 取舍 | 原因 |
 |---|---|
-| `core` 纯 JVM | 协议逻辑可以脱离设备快速回归；目前 100+ 单测 |
+| `core` 纯 JVM | 协议逻辑、cron、技能解析都能脱离设备快速回归；目前 166 项单测 |
 | 自研 SSE / MCP | 需要精确控制流式增量与审批时机，第三方库封装过深 |
 | 消息树而非线性列表 | 编辑与重生成必须保留旧分支，否则用户无法回溯 |
 | 思考档位写在模型档案 | 各家档位不一致，全局枚举无法表达 |
 | 上下文/输出上限"服务端优先 + 预设兜底 + 可手改" | 只有 Gemini/OpenRouter 会返回上限，其余只能猜 |
 | 手写 DI | 模块少，Hilt 的构建成本高于收益 |
+| 技能用文件而非数据库 | 用户能直接用文件管理器改，也能拷进来别人写好的技能；数据库只做索引 |
+| 自研 cron 解析 | 5 段表达式的语义很固定，引库反而增加体积和升级风险 |
+| 定时任务用 AlarmManager 而非 WorkManager | 需要精确到分钟；WorkManager 有最小间隔与系统调度抖动 |
+| 后台审批用白名单预授权 | 无人值守时弹不出确认框；破坏性操作仍然一律拒绝 |

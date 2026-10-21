@@ -21,6 +21,12 @@ class AppContainer(context: Context) {
 
     private val appContext = context.applicationContext
 
+    /** 供后台任务等需要 Context 的组件使用。 */
+    val context: Context get() = appContext
+
+    /** 同上，供简写使用。 */
+    val app: Context get() = appContext
+
     val database: MyAgentDatabase by lazy { MyAgentDatabase.get(appContext) }
 
     val secretStore: SecretStore by lazy { SecretStore(appContext) }
@@ -42,6 +48,29 @@ class AppContainer(context: Context) {
     }
 
     val toolRegistry: ToolRegistry by lazy { ToolRegistry() }
+
+    /** 技能文件仓库（技能以 SKILL.md 文件形式存放）。 */
+    val skillFileStore: com.mynok.myagent.data.skills.SkillFileStore by lazy {
+        com.mynok.myagent.data.skills.SkillFileStore(appContext)
+    }
+
+    val skillRepository: com.mynok.myagent.data.repo.SkillRepository by lazy {
+        com.mynok.myagent.data.repo.SkillRepository(appContext, database, skillFileStore)
+    }
+
+    val scheduledTaskRepository: com.mynok.myagent.data.repo.ScheduledTaskRepository by lazy {
+        com.mynok.myagent.data.repo.ScheduledTaskRepository(database)
+    }
+
+    /** 定时任务调度器。 */
+    val taskScheduler: com.mynok.myagent.data.schedule.TaskScheduler by lazy {
+        com.mynok.myagent.data.schedule.TaskScheduler(appContext)
+    }
+
+    /** 定时任务执行器。 */
+    val taskRunner: com.mynok.myagent.data.schedule.TaskRunner by lazy {
+        com.mynok.myagent.data.schedule.TaskRunner(this)
+    }
 
     val settingsStore: com.mynok.myagent.data.repo.SettingsStore by lazy {
         com.mynok.myagent.data.repo.SettingsStore(appContext)

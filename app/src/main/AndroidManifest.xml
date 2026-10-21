@@ -20,6 +20,13 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- 定时任务：到点唤醒、跑任务、发通知 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
     <application
         android:name=".MyAgentApp"
         android:allowBackup="false"
@@ -36,6 +43,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density|smallestScreenSize"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.MyAgent">
@@ -55,6 +63,30 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- 定时任务：闹钟到点后转给前台服务执行 -->
+        <receiver
+            android:name=".data.schedule.TaskAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.mynok.myagent.task.RUN" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 开机后重新登记所有闹钟（系统重启会清掉 AlarmManager 的闹钟） -->
+        <receiver
+            android:name=".data.schedule.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".data.schedule.TaskRunService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
     </application>
 

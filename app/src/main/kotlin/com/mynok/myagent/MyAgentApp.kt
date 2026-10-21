@@ -10,6 +10,9 @@ import com.mynok.myagent.tools.android.ClipboardTool
 import com.mynok.myagent.tools.android.ContactTools
 import com.mynok.myagent.tools.android.FileTools
 import com.mynok.myagent.tools.android.LocationTools
+import com.mynok.myagent.tools.android.SkillListTool
+import com.mynok.myagent.tools.android.SkillReadTool
+import com.mynok.myagent.tools.android.SkillWriteTool
 import com.mynok.myagent.tools.android.SystemTools
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +35,9 @@ class MyAgentApp : Application() {
             container.workspaceStore.load(container.workspace)
             container.toolPolicyStore.load()
             container.toolPolicyStore.syncTools(container.toolRegistry.all())
+            // 恢复技能目录授权并重新扫描一次索引
+            container.skillRepository.restoreDirectory()
+            container.skillRepository.syncFromFiles()
         }
     }
 
@@ -67,5 +73,10 @@ class MyAgentApp : Application() {
         registry.register(fileTools.read())
         registry.register(fileTools.write())
         registry.register(fileTools.search())
+
+        // —— 技能：模型按需读取正文，也可以自己写新技能 ——
+        registry.register(SkillReadTool(container.skillRepository))
+        registry.register(SkillListTool(container.skillRepository))
+        registry.register(SkillWriteTool(container.skillRepository))
     }
 }

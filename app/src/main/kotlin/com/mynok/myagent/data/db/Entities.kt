@@ -118,17 +118,89 @@ data class ToolPolicyEntity(
 /**
  * 技能（Skill）。
  *
- * 一段可复用的指令模板 + 可选的「本次会话强制启用的工具」列表。
- * 选中后会把 [prompt] 拼进系统提示，并把 [forceTools] 里的工具临时放开。
+ * 技能真正的内容存在文件里（`SKILL.md`，兼容 Agent Skills / ClawHub 格式），
+ * 这张表只是**索引 + 本地状态**：扫描技能目录后同步进来，
+ * 记录启用开关、排序、来源路径，以及从 frontmatter 解析出来的元数据。
+ *
+ * 手工创建的技能不落文件，直接存在这张表里（[source] = BUILTIN）。
  */
 @Entity(tableName = "skills")
 data class SkillEntity(
+    /** 技能 id，用目录名（slug）作为主键。 */
     @PrimaryKey val id: String,
     val name: String,
     val description: String = "",
-    /** 附加到系统提示的正文。 */
+    /** 附加到系统提示的正文（从 SKILL.md 读出来的 Markdown）。 */
     val prompt: String,
     /** 逗号分隔的工具名列表；非空表示本次会话只用这些工具。 */
     val forceTools: String = "",
     val sortOrder: Int = 0,
-)
+    /** 来源：BUILTIN=手工创建，FILE=来自技能目录里的 SKILL.md。 */
+    val source: String = SOURCE_BUILTIN,
+    /** 来源目录名（FILE 来源时有效）。 */
+    val sourceDir: String = "",
+    /** 版本号。 */
+    val version: String = "",
+    /** 许可证。 */
+    val license: String = "",
+    /** 展示用 emoji。 */
+    val emoji: String = "",
+    /** 主页地址。 */
+    val homepage: String = "",
+    /** 逗号分隔的环境变量名（ClawHub 的 requires.env）。 */
+    val requiredEnv: String = "",
+    /** 逗号分隔的命令行程序（手机上通常不适用）。 */
+    val requiredBins: String = "",
+    /** 逗号分隔的平台限制，如 macos。 */
+    val requiredOs: String = "",
+    /** 是否启用。停用的技能不会出现在模型可见的目录里。 */
+    val enabled: Boolean = true,
+    /** 文件最后修改时间，用于判断是否需要重新扫描。 */
+    val updatedAt: Long = 0,
+) {
+    companion object {
+        const val SOURCE_BUILTIN = "BUILTIN"
+        const val SOURCE_FILE = "FILE"
+    }
+}
+
+/**
+ * 定时任务。
+ *
+ * 到点后按 [actionType] 执行：发通知、调一个工具，或者跑一次完整的 Agent。
+ * [cron] 用 5 段 Unix 表达式，具体解析在 core 的 CronExpression。
+ */
+@Entity(tableName = "scheduled_tasks")
+data class ScheduledTaskEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    /** 5 段 cron 表达式，如 "0 8 * * *" 表示每天 8:00。 */
+    val cron: String,
+    /** 动作类型：NOTIFY / TOOL / AGENT。 */
+    val actionType: String,
+    /** 动作参数（JSON 字符串），结构随 actionType 变化。 */
+    val payload: String = "{}",
+    val enabled: Boolean = true,
+    /** AGENT 类型用哪个模型档案。 */
+    val modelProfileId: String? = null,
+    /** AGENT 类型用哪个技能。 */
+    val skillId: String? = null,
+    /** 逗号分隔的白名单工具。AGENT 类型里这些工具视为已授权。 */
+    val allowedTools: String = "",
+    /** 专属会话 id（AGENT 类型的执行结果写进这里）。 */
+    val conversationId: String? = null,
+    val lastRunAt: Long? = null,
+    /** 上次执行结果：OK / ERROR。 */
+    val lastStatus: String = "",
+    /** 上次执行的错误或摘要。 */
+    val lastMessage: String = "",
+    /** 下次触发时间。 */
+    val nextRunAt: Long? = null,
+    val createdAt: Long = 0,
+) {
+    companion object {
+        const val ACTION_NOTIFY = "NOTIFY"
+        const val ACTION_TOOL = "TOOL"
+        const val ACTION_AGENT = "AGENT"
+    }
+}

@@ -13,8 +13,9 @@ import androidx.room.RoomDatabase
         McpServerEntity::class,
         ToolPolicyEntity::class,
         SkillEntity::class,
+        ScheduledTaskEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class MyAgentDatabase : RoomDatabase() {
@@ -25,6 +26,7 @@ abstract class MyAgentDatabase : RoomDatabase() {
     abstract fun mcpServerDao(): McpServerDao
     abstract fun toolPolicyDao(): ToolPolicyDao
     abstract fun skillDao(): SkillDao
+    abstract fun scheduledTaskDao(): ScheduledTaskDao
 
     companion object {
         @Volatile
@@ -37,7 +39,14 @@ abstract class MyAgentDatabase : RoomDatabase() {
                     MyAgentDatabase::class.java,
                     "myagent.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(
+                        MIGRATION_1_2,
+                        MIGRATION_2_3,
+                        MIGRATION_3_4,
+                        MIGRATION_4_5,
+                        MIGRATION_5_6,
+                        MIGRATION_6_7,
+                    )
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                     .also { instance = it }
@@ -138,6 +147,64 @@ abstract class MyAgentDatabase : RoomDatabase() {
                 }
             }
             found
+        }
+
+        /**
+         * v6 → v7：技能改成文件化 + 新增定时任务。
+         *
+         * 技能表直接重建（旧的行是「提示词片段」形态，和新的文件化技能不是一回事，
+         * 没有迁移价值）；会话、消息、模型档案等表原样保留。
+         */
+        val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `skills`")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `skills` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `description` TEXT NOT NULL DEFAULT '',
+                        `prompt` TEXT NOT NULL,
+                        `forceTools` TEXT NOT NULL DEFAULT '',
+                        `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                        `source` TEXT NOT NULL DEFAULT 'BUILTIN',
+                        `sourceDir` TEXT NOT NULL DEFAULT '',
+                        `version` TEXT NOT NULL DEFAULT '',
+                        `license` TEXT NOT NULL DEFAULT '',
+                        `emoji` TEXT NOT NULL DEFAULT '',
+                        `homepage` TEXT NOT NULL DEFAULT '',
+                        `requiredEnv` TEXT NOT NULL DEFAULT '',
+                        `requiredBins` TEXT NOT NULL DEFAULT '',
+                        `requiredOs` TEXT NOT NULL DEFAULT '',
+                        `enabled` INTEGER NOT NULL DEFAULT 1,
+                        `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `scheduled_tasks` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `cron` TEXT NOT NULL,
+                        `actionType` TEXT NOT NULL,
+                        `payload` TEXT NOT NULL DEFAULT '{}',
+                        `enabled` INTEGER NOT NULL DEFAULT 1,
+                        `modelProfileId` TEXT,
+                        `skillId` TEXT,
+                        `allowedTools` TEXT NOT NULL DEFAULT '',
+                        `conversationId` TEXT,
+                        `lastRunAt` INTEGER,
+                        `lastStatus` TEXT NOT NULL DEFAULT '',
+                        `lastMessage` TEXT NOT NULL DEFAULT '',
+                        `nextRunAt` INTEGER,
+                        `createdAt` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent(),
+                )
+            }
         }
     }
 }

@@ -85,6 +85,8 @@ import com.mynok.myagent.ui.models.ModelsViewModel
 import com.mynok.myagent.ui.sessions.SessionsViewModel
 import com.mynok.myagent.ui.settings.SettingsScreen
 import com.mynok.myagent.ui.settings.SettingsViewModel
+import com.mynok.myagent.ui.tools.ScheduledTasksScreen
+import com.mynok.myagent.ui.tools.ScheduledTasksViewModel
 import com.mynok.myagent.ui.tools.SkillsScreen
 import com.mynok.myagent.ui.tools.ToolsScreen
 import com.mynok.myagent.ui.tools.ToolsViewModel
@@ -100,20 +102,26 @@ private enum class Destination(val label: String) {
     SETTINGS("设置"),
 }
 
-/** 「模型」页里的三个子项。 */
-private enum class ModelTab(val label: String) {
-    PROFILES("模型配置"),
-    TOOLS("工具"),
-    SKILLS("技能"),
+/** 「模型」页里的子项。 */
+private enum class ModelTab(val label: String, val shortLabel: String) {
+    PROFILES("模型配置", "配置"),
+    TOOLS("工具", "工具"),
+    SKILLS("技能", "技能"),
+    SCHEDULED("定时任务", "定时"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MyAgentRoot(container: AppContainer) {
+fun MyAgentRoot(
+    container: AppContainer,
+    /** 从通知点进来时要直接打开的会话。 */
+    initialConversationId: String? = null,
+) {
     val chatVm: ChatViewModel = viewModel(factory = ChatViewModel.factory(container))
     val sessionsVm: SessionsViewModel = viewModel(factory = SessionsViewModel.factory(container))
     val modelsVm: ModelsViewModel = viewModel(factory = ModelsViewModel.factory(container))
     val toolsVm: ToolsViewModel = viewModel(factory = ToolsViewModel.factory(container))
+    val tasksVm: ScheduledTasksViewModel = viewModel(factory = ScheduledTasksViewModel.factory(container))
     val settingsVm: SettingsViewModel = viewModel(factory = SettingsViewModel.factory(container))
 
     val width = rememberWindowWidth()
@@ -126,6 +134,7 @@ fun MyAgentRoot(container: AppContainer) {
     var modelTab by rememberSaveable { mutableStateOf(ModelTab.PROFILES) }
     var pendingDeleteSession by remember { mutableStateOf<ConversationEntity?>(null) }
     var showConversationSettings by remember { mutableStateOf(false) }
+    var showSkillOnboarding by remember { mutableStateOf(false) }
 
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -134,6 +143,7 @@ fun MyAgentRoot(container: AppContainer) {
     val sessionsState by sessionsVm.state.collectAsStateWithLifecycleCompat()
     val modelsState by modelsVm.state.collectAsStateWithLifecycleCompat()
     val toolsState by toolsVm.state.collectAsStateWithLifecycleCompat()
+    val tasksState by tasksVm.state.collectAsStateWithLifecycleCompat()
     val settingsState by settingsVm.state.collectAsStateWithLifecycleCompat()
     val showContext by chatVm.showContext.collectAsStateWithLifecycleCompat()
     val pendingApproval by container.approvalCoordinator.pending.collectAsStateWithLifecycleCompat()
@@ -142,6 +152,13 @@ fun MyAgentRoot(container: AppContainer) {
 
     LaunchedEffect(Unit) {
         toolsVm.refreshBuiltIn(container.toolRegistry.all())
+    }
+
+    // 首次启动：友好提示一次，让用户选一个技能目录
+    LaunchedEffect(Unit) {
+        if (container.skillRepository.shouldShowOnboarding()) {
+            showSkillOnboarding = true
+        }
     }
 
     // 打开一个会话：记下当前 id，平板下高亮，手机下关抽屉
@@ -153,6 +170,15 @@ fun MyAgentRoot(container: AppContainer) {
     val newSession: () -> Unit = {
         chatVm.newConversation()
         scope.launch { drawerState.close() }
+    }
+
+    // 从定时任务的通知点进来：直接跳到那个任务的专属会话
+    LaunchedEffect(initialConversationId) {
+        if (!initialConversationId.isNullOrBlank()) {
+            destination = Destination.CHAT
+            sessionsVm.select(initialConversationId)
+            chatVm.openConversation(initialConversationId)
+        }
     }
 
     val sessionsPane: @Composable () -> Unit = {
@@ -223,10 +249,29 @@ fun MyAgentRoot(container: AppContainer) {
 
             ModelTab.SKILLS -> SkillsScreen(
                 skills = toolsState.skills,
-                onSave = { id, name, desc, prompt, force ->
-                    toolsVm.saveSkill(id, name, desc, prompt, force)
+                directoryBound = toolsState.skillDirectoryBound,
+                directoryName = toolsState.skillDirectoryName,
+                onBindDirectory = {
+                    activity?.requestSkillDirectory { uri -> toolsVm.bindSkillDirectory(uri) }
                 },
+                onRescan = { toolsVm.rescanSkills() },
+                onCreateFromTemplate = { slug -> toolsVm.createFromTemplate(slug) },
+                onSetEnabled = { id, enabled -> toolsVm.setSkillEnabled(id, enabled) },
                 onDelete = { toolsVm.deleteSkill(it) },
+            )
+
+            ModelTab.SCHEDULED -> ScheduledTasksScreen(
+                state = tasksState,
+                onSave = { id, name, type, time, weekdays, interval, actionType, payload, modelId, skillId, tools, enabled ->
+                    tasksVm.save(
+                        id, name, type, time, weekdays, interval,
+                        actionType, payload, modelId, skillId, tools, enabled,
+                    )
+                },
+                onSetEnabled = { id, enabled -> tasksVm.setEnabled(id, enabled) },
+                onDelete = { tasksVm.delete(it) },
+                onRunNow = { tasksVm.runNow(it) },
+                onRequestExactAlarm = { tasksVm.requestExactAlarm() },
             )
         }
     }
@@ -252,7 +297,8 @@ fun MyAgentRoot(container: AppContainer) {
                         Tab(
                             selected = modelTab == tab,
                             onClick = { modelTab = tab },
-                            text = { Text(tab.label) },
+                            // 手机上四个标签，用短标签才放得下
+                            text = { Text(tab.shortLabel) },
                         )
                     }
                 }
@@ -406,6 +452,41 @@ fun MyAgentRoot(container: AppContainer) {
         )
     }
 
+    if (showSkillOnboarding) {
+        AlertDialog(
+            onDismissRequest = {
+                showSkillOnboarding = false
+                scope.launch { container.skillRepository.markOnboardingShown() }
+            },
+            title = { Text("放技能文件的地方") },
+            text = {
+                Text(
+                    "技能是文件：一个目录一个技能，里面放 SKILL.md。\n\n" +
+                        "选一个手机上的文件夹（推荐「下载」或「文档」），" +
+                        "MyAgent 会在里面建一个 skills 子目录。" +
+                        "之后你可以直接用文件管理器往里放技能，" +
+                        "也可以让我帮你写。\n\n" +
+                        "只有第一次需要授权，之后不会再打扰你。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSkillOnboarding = false
+                    scope.launch { container.skillRepository.markOnboardingShown() }
+                    activity?.requestSkillDirectory { uri ->
+                        toolsVm.bindSkillDirectory(uri)
+                    }
+                }) { Text("去选择") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showSkillOnboarding = false
+                    scope.launch { container.skillRepository.markOnboardingShown() }
+                }) { Text("以后再说") }
+            },
+        )
+    }
+
     ApprovalDialog(
         pending = pendingApproval,
         onApprove = { container.approvalCoordinator.resolve(true) },
@@ -503,7 +584,7 @@ private fun ChatLayout(
             )
             if (state.skills.isNotEmpty()) {
                 SkillChipRow(
-                    skills = state.skills,
+                    skills = state.skills.filter { it.enabled },
                     activeId = state.activeSkillId,
                     onToggle = { vm.selectSkill(it) },
                 )
@@ -557,7 +638,7 @@ private fun ModelTabsPane(
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text("模型设置", style = MaterialTheme.typography.titleMedium)
             Text(
-                "配置、工具与技能",
+                "配置、工具、技能与定时任务",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

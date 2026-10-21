@@ -24,6 +24,8 @@ dependencies {
     api(libs.kotlinx.coroutines.core)
     api(libs.kotlinx.serialization.json)
     api(libs.okhttp)
+    // YAML frontmatter 解析（Agent Skills / ClawHub 的 SKILL.md 格式）
+    implementation(libs.kaml)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

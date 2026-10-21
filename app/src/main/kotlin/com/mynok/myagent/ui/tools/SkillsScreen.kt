@@ -13,10 +13,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -24,7 +26,8 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,21 +40,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mynok.myagent.data.db.SkillEntity
+import com.mynok.myagent.data.skills.SkillTemplates
 
 /**
- * 技能配置页。
+ * 技能页。
  *
- * 技能 = 一段可复用的提示词 + 可选的工具白名单，在对话页顶部一键启用。
+ * 技能是**文件**：一个目录一个技能，里面放 SKILL.md。
+ * 用户在「选择技能目录」里授权一个目录后，就能用手机文件管理器直接增删改，
+ * 也能让模型用 skill_write 工具写新技能。
  */
 @Composable
 fun SkillsScreen(
     skills: List<SkillEntity>,
-    onSave: (id: String?, name: String, description: String, prompt: String, forceTools: String) -> Unit,
+    directoryBound: Boolean,
+    directoryName: String,
+    onBindDirectory: () -> Unit,
+    onRescan: () -> Unit,
+    onCreateFromTemplate: (String) -> Unit,
+    onSetEnabled: (String, Boolean) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var editing by remember { mutableStateOf<SkillEntity?>(null) }
     var pendingDelete by remember { mutableStateOf<SkillEntity?>(null) }
+    var viewing by remember { mutableStateOf<SkillEntity?>(null) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -61,10 +72,12 @@ fun SkillsScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Spacer(Modifier.weight(1f))
-            FilledTonalButton(onClick = { editing = SkillEntity(id = "", name = "", prompt = "") }) {
-                Icon(Icons.Filled.Add, null)
-                Spacer(Modifier.width(6.dp))
-                Text("添加技能")
+            if (directoryBound) {
+                FilledTonalButton(onClick = onRescan) {
+                    Icon(Icons.Filled.Refresh, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("重新扫描")
+                }
             }
         }
 
@@ -83,49 +96,103 @@ fun SkillsScreen(
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            "技能是一段可复用的指令模板。在对话页输入框上方点选后，提示词会并入系统提示；" +
-                                "「限定工具」非空时，本次对话只向模型暴露这些工具。",
+                            "技能以文件形式存放：一个技能一个目录，里面必须有 SKILL.md，" +
+                                "格式兼容 Agent Skills 与 ClawHub。",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        Spacer(Modifier.height(8.dp))
+                        if (directoryBound) {
+                            Text(
+                                "当前目录：$directoryName",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Row {
+                                OutlinedButton(onClick = onBindDirectory) {
+                                    Icon(Icons.Filled.FolderOpen, null)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("更换目录")
+                                }
+                            }
+                        } else {
+                            Text(
+                                "还没有选择技能目录。选一个手机上的文件夹（推荐「下载」或「文档」），" +
+                                    "之后就能直接用文件管理器放技能文件。",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Button(onClick = onBindDirectory) {
+                                Icon(Icons.Filled.FolderOpen, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("选择技能目录")
+                            }
+                        }
                     }
                 }
             }
+
             if (skills.isEmpty()) {
                 item {
                     Text(
-                        "还没有技能。可以试试「翻译官」「代码审查」「会议纪要」这类常用模板。",
+                        if (directoryBound) {
+                            "还没有技能。在技能目录里放一个 SKILL.md，或者让模型帮你写一个。"
+                        } else {
+                            "选择技能目录后就能添加技能了。"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            items(skills, key = { it.id }) { skill ->
+
+            if (directoryBound) {
+                item {
+                    Text(
+                        "从模板创建",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SkillTemplates.all.forEach { template ->
+                            AssistChip(
+                                onClick = { onCreateFromTemplate(template.slug) },
+                                label = { Text(template.name, maxLines = 1) },
+                            )
+                        }
+                    }
+                }
+            }
+
+            items(skills, key = { it.name }) { skill ->
                 SkillCard(
                     skill = skill,
-                    onEdit = { editing = skill },
+                    onView = { viewing = skill },
+                    onToggle = { enabled -> onSetEnabled(skill.id, enabled) },
                     onDelete = { pendingDelete = skill },
                 )
             }
         }
     }
 
-    editing?.let { skill ->
-        SkillEditDialog(
-            existing = skill,
-            onDismiss = { editing = null },
-            onSave = { id, name, desc, prompt, tools ->
-                editing = null
-                onSave(id, name, desc, prompt, tools)
-            },
-        )
+    viewing?.let { skill ->
+        SkillDetailDialog(skill = skill, onDismiss = { viewing = null })
     }
 
     pendingDelete?.let { skill ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("删除技能？") },
-            text = { Text("「${skill.name}」将被移除，已发送的消息不受影响。") },
+            text = {
+                Text(
+                    if (skill.source == SkillEntity.SOURCE_FILE) {
+                        "「${skill.name}」的技能文件会一起删除，这个操作不可撤销。"
+                    } else {
+                        "「${skill.name}」将被移除，已发送的消息不受影响。"
+                    },
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     pendingDelete = null
@@ -144,7 +211,8 @@ fun SkillsScreen(
 @Composable
 private fun SkillCard(
     skill: SkillEntity,
-    onEdit: () -> Unit,
+    onView: () -> Unit,
+    onToggle: (Boolean) -> Unit,
     onDelete: () -> Unit,
 ) {
     Card(
@@ -154,15 +222,17 @@ private fun SkillCard(
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val emoji = skill.emoji?.let { "$it " }.orEmpty()
                 Text(
-                    skill.name,
+                    "$emoji${skill.name}",
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Filled.Edit, contentDescription = "编辑")
+                Switch(checked = skill.enabled, onCheckedChange = onToggle)
+                IconButton(onClick = onView) {
+                    Icon(Icons.Filled.Visibility, contentDescription = "查看")
                 }
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Filled.Delete, contentDescription = "删除")
@@ -177,16 +247,19 @@ private fun SkillCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                skill.prompt,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (skill.forceTools.isNotBlank()) {
+            val notes = buildList {
+                if (skill.source == SkillEntity.SOURCE_FILE) add("来自文件")
+                if (skill.version.isNotBlank()) add("v${skill.version}")
+                if (skill.license.isNotBlank()) add(skill.license)
+                if (skill.requiredEnv.isNotBlank()) add("需要密钥：${skill.requiredEnv}")
+                if (skill.requiredBins.isNotBlank()) add("需要命令行：${skill.requiredBins}")
+                if (skill.requiredOs.isNotBlank()) add("仅限：${skill.requiredOs}")
+                if (skill.forceTools.isNotBlank()) add("限定工具：${skill.forceTools}")
+            }
+            if (notes.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "限定工具：${skill.forceTools}",
+                    notes.joinToString("　"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -196,68 +269,31 @@ private fun SkillCard(
 }
 
 @Composable
-private fun SkillEditDialog(
-    existing: SkillEntity,
-    onDismiss: () -> Unit,
-    onSave: (id: String?, name: String, description: String, prompt: String, forceTools: String) -> Unit,
-) {
-    var name by remember { mutableStateOf(existing.name) }
-    var description by remember { mutableStateOf(existing.description) }
-    var prompt by remember { mutableStateOf(existing.prompt) }
-    var forceTools by remember { mutableStateOf(existing.forceTools) }
-
+private fun SkillDetailDialog(skill: SkillEntity, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (existing.id.isEmpty()) "添加技能" else "编辑技能") },
+        title = { Text(skill.name) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("技能名称") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("一句话说明（可留空）") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = prompt,
-                    onValueChange = { prompt = it },
-                    label = { Text("提示词（会加进系统提示）") },
-                    minLines = 4,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = forceTools,
-                    onValueChange = { forceTools = it },
-                    label = { Text("限定工具（逗号分隔，可留空）") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (skill.description.isNotBlank()) {
+                    Text(skill.description, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (skill.prompt.isNotBlank()) {
+                    Text(
+                        skill.prompt,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text("（没有正文）", style = MaterialTheme.typography.bodySmall)
+                }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    onSave(
-                        existing.id.ifEmpty { null },
-                        name,
-                        description,
-                        prompt,
-                        forceTools,
-                    )
-                },
-                enabled = prompt.isNotBlank(),
-            ) { Text("保存") }
+            TextButton(onClick = onDismiss) { Text("关闭") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }

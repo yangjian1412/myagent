@@ -55,6 +55,8 @@ private val permissionGroups = listOf(
     ),
     PermissionGroup("电话", listOf(Manifest.permission.CALL_PHONE)),
     PermissionGroup("麦克风", listOf(Manifest.permission.RECORD_AUDIO)),
+    // 定时任务执行完要发通知
+    PermissionGroup("通知", listOf(Manifest.permission.POST_NOTIFICATIONS)),
 )
 
 /**

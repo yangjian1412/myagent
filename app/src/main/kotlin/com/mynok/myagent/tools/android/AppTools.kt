@@ -228,7 +228,7 @@ object AppTools {
     fun deviceInfo(context: Context): Tool = object : Tool {
         override val spec = ToolSpec(
             name = "device_info",
-            description = "获取设备信息：型号、Android 版本、屏幕分辨率、内存、存储剩余。",
+            description = "获取设备状态：型号、Android 版本、屏幕分辨率、内存、存储剩余、电量与充电状态、当前网络。",
             parameters = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject { })
@@ -246,6 +246,12 @@ object AppTools {
             val stat = runCatching {
                 context.filesDir.usableSpace / 1024 / 1024
             }.getOrDefault(0)
+            val battery = context.getSystemService(android.os.BatteryManager::class.java)
+            val batteryLevel = battery
+                ?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                ?.takeIf { it in 0..100 }
+            val charging = battery?.isCharging == true
+            val network = describeNetwork(context)
             return ToolResult.ok(
                 buildString {
                     appendLine("设备: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
@@ -253,9 +259,31 @@ object AppTools {
                     appendLine("分辨率: ${metrics.widthPixels}x${metrics.heightPixels} @${metrics.densityDpi}dpi")
                     appendLine("内存: 已用 ${usedMb}MB / 上限 ${maxMb}MB")
                     appendLine("应用可用存储: ${stat}MB")
+                    if (batteryLevel != null) {
+                        appendLine("电量: $batteryLevel%（${if (charging) "充电中" else "未充电"}）")
+                    } else {
+                        appendLine("电量: 未知")
+                    }
+                    appendLine("网络: $network")
                 },
             )
         }
+    }
+
+    private fun describeNetwork(context: Context): String {
+        val manager = context.getSystemService(android.net.ConnectivityManager::class.java)
+            ?: return "无法获取网络状态"
+        val network = manager.activeNetwork ?: return "未连接"
+        val caps = manager.getNetworkCapabilities(network) ?: return "未连接"
+        val transport = when {
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "蜂窝网络"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) -> "以太网"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
+            else -> "其他网络"
+        }
+        val validated = caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return "$transport（${if (validated) "可访问互联网" else "未验证联网"}）"
     }
 
     /** 打开"应用信息"系统页。 */

@@ -164,6 +164,9 @@ fun ToolsScreen(
                 }
             }
 
+            item { SectionTitle("系统权限") }
+            item { SystemPermissionsCard() }
+
             item { SectionTitle("内置工具") }
             item {
                 Card(

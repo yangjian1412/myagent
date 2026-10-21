@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 相机输出临时文件；拍完读取后立即删除 -->
+    <cache-path name="camera" path="camera/" />
+</paths>

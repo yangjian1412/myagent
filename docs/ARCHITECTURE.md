@@ -1,6 +1,6 @@
 # MyAgent 架构说明
 
-版本：`0.1.0beta3`　包名：`com.mynok.myagent`
+版本：`0.1.0beta4`　包名：`com.mynok.myagent`
 
 手机端 AI Agent harness。核心目标：**本地模型与在线模型可自由切换**，具备工具调用、MCP 接入、会话分支、多模态识图能力，并尽量把可测逻辑放进纯 JVM 模块。
 
@@ -129,9 +129,24 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 
 - 文件工具只能通过 `FileWorkspace` 访问用户通过 SAF 授权的目录（`SafFileWorkspace`），不支持任意路径；
 - HTTP 工具受 `ToolPolicyStore` 的域名/开关约束；
-- Android 专有工具（通知、应用列表、剪贴板等）在 `app/tools/android`，不经 core 暴露。
+- Android 专有工具（应用列表、剪贴板、日历、联系人、定位等）在 `app/tools/android`，不经 core 暴露。
 
-### 4.4 MCP
+### 4.4 系统工具与权限
+
+| 工具 | 权限 | 说明 |
+|---|---|---|
+| `alarm` | 无 | 闹钟 / 倒计时 / 打开闹钟页，走 `AlarmClock` Intent |
+| `volume` / `torch` | 无 | 读音量不审批，写音量与手电筒动态审批 |
+| `call` | `CALL_PHONE` | 没有权限时降级为 `ACTION_DIAL`，只打开拨号界面 |
+| `take_photo` | 无 | 走系统相机 `ACTION_IMAGE_CAPTURE`；`FileProvider` + `MediaCaptureCoordinator` 等 Activity 结果 |
+| `record_audio` | `RECORD_AUDIO` | `MediaRecorder` 录 1–60 秒，存 App 专属外部目录；模型不能直接听 |
+| `calendar` | `READ_CALENDAR` / `WRITE_CALENDAR` | `list_*` 只读；create/update/delete 由工具内部动态审批；无写权限时 create 降级为系统日历预填页 |
+| `contacts` | `READ_CONTACTS` | 只按姓名/号码搜索，不导出整个通讯录 |
+| `location` | `ACCESS_FINE_LOCATION` / `COARSE` | 一次性定位，GPS → 网络 → 最近已知位置逐级降级 |
+
+权限统一在「模型 → 工具 → 系统权限」卡片里申请；工具只检查权限并返回「去这里授权」的提示。类别三的能力（通知读取、无障碍模拟点击、修改系统设置）不实现。日历、联系人、位置数据会随工具结果发给当前模型，卡片里有明确提示。
+
+### 4.5 MCP
 
 只做**客户端**：`McpClient` 连接远端 server，`tools/list` 拿到工具定义后包成 `McpTool` 注册进 `ToolRegistry`，与内置工具同构。因此审批、风险分级、工具页开关对 MCP 工具自动生效。
 

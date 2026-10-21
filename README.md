@@ -2,7 +2,7 @@
 
 Android 手机端的 AI Agent Harness：本地模型与在线模型自由切换，支持工具调用、MCP、多会话分支与多模态识图。
 
-- 版本：`0.1.0beta3`
+- 版本：`0.1.0beta4`
 - 包名：`com.mynok.myagent`
 - 最低系统：Android 8.0（API 26），目标 API 36，编译 API 37
 
@@ -19,6 +19,8 @@ Android 手机端的 AI Agent Harness：本地模型与在线模型自由切换�
 **Agent 与工具**
 - 内置工具：`web_search`（Bing / DuckDuckGo / Tavily / Brave）、`web_fetch`、`http_request`、`notion`
 - Android 工具：截图、剪贴板、文件读写与搜索（SAF 授权目录）、应用列表 / 启动 / 信息、打开链接、发送 Intent、设备信息
+- 系统工具：闹钟 / 倒计时、日历（查询与读写，未授权时降级为系统日历预填新建）、联系人搜索、定位、拨号、音量、手电筒、拍照、录音
+- 日历 / 联系人 / 定位 / 电话 / 麦克风权限集中在「模型 → 工具 → 系统权限」申请；未授权时工具会返回可操作的提示
 - MCP：通过 HTTP / SSE 接入 MCP server，工具自动注册
 - 每个工具可单独启用、设置风险等级与是否每次确认；新建页面这类写操作会在执行前弹确认
 - 技能（Skill）：预设系统提示 + 工具白名单，可在对话页快速切换
@@ -37,6 +39,7 @@ Android 手机端的 AI Agent Harness：本地模型与在线模型自由切换�
 **安全**
 - 模型 API key 与第三方工具密钥使用 Android Keystore 的 AES/GCM 加密后存本地，明文不落库
 - 允许明文 HTTP，仅用于连接局域网里的本地模型服务；界面会对 `http://` 端点给出提示
+- 日历、联系人、位置等系统数据只在你授权后读取，并会作为工具结果发送给当前模型；权限可随时在系统设置里收回
 
 ## 技术栈
 
@@ -98,6 +101,7 @@ mobile-agent/
 
 ```bash
 ./gradlew :core:test        # 纯 JVM 单元测试，114 项
+./gradlew :app:testDebugUnitTest  # app 层解析逻辑，7 项
 ```
 
 端到端联调（工具调用 → 审批 → 回灌 → 最终回复）：

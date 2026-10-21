@@ -48,11 +48,25 @@ class MainActivity : ComponentActivity() {
 
     private var pendingTreeCallback: ((List<Uri>) -> Unit)? = null
     private var pendingImageCallback: ((Uri) -> Unit)? = null
+    private var pendingPhotoUri: Uri? = null
+
+    private val photoLauncher = registerForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { success ->
+        val container = (application as MyAgentApp).container
+        container.mediaCapture.resolve(if (success) pendingPhotoUri else null)
+        pendingPhotoUri = null
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        pendingPhotoUri = savedInstanceState?.getString(KEY_PENDING_PHOTO)?.let(Uri::parse)
         val container = (application as MyAgentApp).container
+        container.mediaCapture.attach { uri ->
+            pendingPhotoUri = uri
+            photoLauncher.launch(uri)
+        }
         setContent {
             // 外观设置直接在最外层收集，保证底部导航、对话框等也一起换肤
             val settings by container.settingsStore.settings.collectAsState(initial = AppSettings())
@@ -87,5 +101,22 @@ class MainActivity : ComponentActivity() {
     fun requestImage(callback: (Uri) -> Unit) {
         pendingImageCallback = callback
         imageLauncher.launch("image/*")
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingPhotoUri?.let { outState.putString(KEY_PENDING_PHOTO, it.toString()) }
+    }
+
+    override fun onDestroy() {
+        // 转屏时不要把正在等待的拍照结果取消掉；真正退出时再清理。
+        if (!isChangingConfigurations) {
+            (application as? MyAgentApp)?.container?.mediaCapture?.attach(null)
+        }
+        super.onDestroy()
+    }
+
+    private companion object {
+        const val KEY_PENDING_PHOTO = "pending_photo_uri"
     }
 }

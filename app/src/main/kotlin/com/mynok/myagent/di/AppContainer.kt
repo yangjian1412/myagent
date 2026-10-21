@@ -9,6 +9,7 @@ import com.mynok.myagent.core.tools.ToolRegistry
 import com.mynok.myagent.data.crypto.SecretStore
 import com.mynok.myagent.data.db.MyAgentDatabase
 import com.mynok.myagent.data.repo.ConversationRepository
+import com.mynok.myagent.tools.android.MediaCaptureCoordinator
 import com.mynok.myagent.tools.android.SafFileWorkspace
 
 /**
@@ -62,4 +63,9 @@ class AppContainer(context: Context) {
     }
 
     val approvalCoordinator: ApprovalCoordinator by lazy { ApprovalCoordinator() }
+
+    /** 拍照工具与 Activity 之间的桥梁。 */
+    val mediaCapture: MediaCaptureCoordinator by lazy {
+        MediaCaptureCoordinator()
+    }
 }

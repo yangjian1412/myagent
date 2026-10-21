@@ -3,9 +3,15 @@ package com.mynok.myagent
 import android.app.Application
 import com.mynok.myagent.di.AppContainer
 import com.mynok.myagent.tools.android.AppTools
+import com.mynok.myagent.tools.android.AudioRecorderTool
+import com.mynok.myagent.tools.android.CalendarTools
+import com.mynok.myagent.tools.android.CameraTool
 import com.mynok.myagent.tools.android.ClipboardTool
+import com.mynok.myagent.tools.android.ContactTools
 import com.mynok.myagent.tools.android.FileTools
+import com.mynok.myagent.tools.android.LocationTools
 import com.mynok.myagent.tools.android.ScreenshotTool
+import com.mynok.myagent.tools.android.SystemTools
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,6 +52,17 @@ class MyAgentApp : Application() {
         registry.register(AppTools.deviceInfo(ctx))
         registry.register(ScreenshotTool())
         registry.register(ClipboardTool(ctx))
+
+        // —— 系统能力：闹钟、日历、联系人、定位、电话、音量、手电筒、拍照、录音 ——
+        registry.register(SystemTools.alarm(ctx))
+        registry.register(SystemTools.volume(ctx))
+        registry.register(SystemTools.torch(ctx))
+        registry.register(SystemTools.phone(ctx))
+        registry.register(CalendarTools.calendar(ctx))
+        registry.register(ContactTools.contacts(ctx))
+        registry.register(LocationTools.location(ctx))
+        registry.register(CameraTool(ctx, container.mediaCapture))
+        registry.register(AudioRecorderTool(ctx))
 
         val fileTools = FileTools(container.workspace)
         registry.register(fileTools.list())

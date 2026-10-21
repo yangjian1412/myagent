@@ -15,7 +15,6 @@ import com.mynok.myagent.core.tools.ToolApproval
 import com.mynok.myagent.core.tools.ToolContext
 import com.mynok.myagent.core.tools.ToolResult
 import com.mynok.myagent.core.tools.ToolRisk
-import com.mynok.myagent.core.tools.boolArg
 import com.mynok.myagent.core.tools.intArg
 import com.mynok.myagent.core.tools.stringArg
 import kotlinx.serialization.json.JsonArray
@@ -28,7 +27,9 @@ import kotlin.math.roundToInt
 import java.util.Calendar
 
 /**
- * 闹钟、音量、手电筒、拨号这些不需要运行时权限的系统能力。
+ * 闹钟、音量、手电筒、拨号等系统能力。
+ *
+ * 闹钟使用时钟应用声明的普通权限；拨号在缺少电话权限时会降级到拨号界面。
  */
 object SystemTools {
 
@@ -39,7 +40,8 @@ object SystemTools {
             name = "alarm",
             description = "设置手机闹钟或倒计时，也可以打开系统闹钟页面。" +
                 "action=set_alarm（需要 hour、minute，可选 label、days）、" +
-                "set_timer（需要 seconds，可选 label）、show_alarms。",
+                "set_timer（需要 seconds，可选 label）、show_alarms。" +
+                "会尽量静默设置；部分系统的时钟应用可能仍停在预填页面，需要用户点保存。",
             parameters = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
@@ -72,10 +74,6 @@ object SystemTools {
                         put("items", buildJsonObject { put("type", "integer") })
                         put("description", "重复日，ISO 星期：1=周一 … 7=周日；省略表示只响一次")
                     })
-                    put("skip_ui", buildJsonObject {
-                        put("type", "boolean")
-                        put("description", "是否尽量直接设置而不打开时钟界面，默认 true")
-                    })
                 })
                 put("required", buildJsonArray { add(JsonPrimitive("action")) })
             },
@@ -101,10 +99,7 @@ object SystemTools {
                         if (days.isNotEmpty()) {
                             putExtra(AlarmClock.EXTRA_DAYS, ArrayList(days.map { isoToCalendarDay(it) }))
                         }
-                        putExtra(
-                            AlarmClock.EXTRA_SKIP_UI,
-                            args.boolArg("skip_ui", default = true),
-                        )
+                        putExtra(AlarmClock.EXTRA_SKIP_UI, true)
                     }
                 }
 
@@ -119,10 +114,7 @@ object SystemTools {
                         args.stringArg("label", "message")?.let {
                             putExtra(AlarmClock.EXTRA_MESSAGE, it)
                         }
-                        putExtra(
-                            AlarmClock.EXTRA_SKIP_UI,
-                            args.boolArg("skip_ui", default = true),
-                        )
+                        putExtra(AlarmClock.EXTRA_SKIP_UI, true)
                     }
                 }
 
@@ -138,13 +130,13 @@ object SystemTools {
                 context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 when (action) {
                     "set_timer" -> ToolResult.ok(
-                        "已请求设置 ${args.intArg("seconds", "length", "duration")} 秒倒计时。" +
-                            "如果时钟应用不支持静默设置，会打开预填界面让用户确认。",
+                        "已向系统时钟发送 ${args.intArg("seconds", "length", "duration")} 秒倒计时设置请求。" +
+                            "若时钟应用不支持静默设置，会停在预填页面，需要用户点保存。",
                     )
                     "show_alarms" -> ToolResult.ok("已打开系统闹钟页面。")
                     else -> ToolResult.ok(
-                        "已请求设置闹钟。" +
-                            "如果时钟应用不支持静默设置，会打开预填界面让用户确认。",
+                        "已向系统时钟发送闹钟设置请求。" +
+                            "若时钟应用不支持静默设置，会停在预填页面，需要用户点保存。",
                     )
                 }
             } catch (e: Exception) {

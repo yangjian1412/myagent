@@ -213,7 +213,6 @@ fun MyAgentRoot(container: AppContainer) {
                 onGrantDirectory = {
                     activity?.requestDirectory { uris -> toolsVm.grantDirectories(uris) }
                 },
-                onRequestScreenCapture = { activity?.requestScreenCapture() },
                 onSetToolEnabled = { name, enabled -> toolsVm.setToolEnabled(name, enabled) },
                 onSetToolApproval = { name, require, risk ->
                     toolsVm.setToolRequireApproval(name, require, risk)

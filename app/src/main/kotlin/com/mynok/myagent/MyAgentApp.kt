@@ -10,7 +10,6 @@ import com.mynok.myagent.tools.android.ClipboardTool
 import com.mynok.myagent.tools.android.ContactTools
 import com.mynok.myagent.tools.android.FileTools
 import com.mynok.myagent.tools.android.LocationTools
-import com.mynok.myagent.tools.android.ScreenshotTool
 import com.mynok.myagent.tools.android.SystemTools
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,7 +49,6 @@ class MyAgentApp : Application() {
         registry.register(AppTools.openUrl(ctx))
         registry.register(AppTools.sendIntent(ctx))
         registry.register(AppTools.deviceInfo(ctx))
-        registry.register(ScreenshotTool())
         registry.register(ClipboardTool(ctx))
 
         // —— 系统能力：闹钟、日历、联系人、定位、电话、音量、手电筒、拍照、录音 ——

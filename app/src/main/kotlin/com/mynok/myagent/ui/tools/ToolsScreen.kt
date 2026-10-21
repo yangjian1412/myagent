@@ -60,7 +60,6 @@ fun ToolsScreen(
     onRemoveMcp: (String) -> Unit,
     onSyncMcp: () -> Unit,
     onGrantDirectory: () -> Unit,
-    onRequestScreenCapture: () -> Unit,
     onSetToolEnabled: (String, Boolean) -> Unit,
     onSetToolApproval: (String, Boolean, ToolRisk) -> Unit,
     authorizedRoots: List<String>,
@@ -168,26 +167,6 @@ fun ToolsScreen(
             item { SystemPermissionsCard() }
 
             item { SectionTitle("内置工具") }
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    ),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            "「screenshot」工具需要先授权屏幕共享，授权后模型才能看到屏幕内容。",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        FilledTonalButton(onClick = onRequestScreenCapture) {
-                            Icon(Icons.Filled.Visibility, null)
-                            Spacer(Modifier.width(6.dp))
-                            Text("开启屏幕共享")
-                        }
-                    }
-                }
-            }
             items(state.builtIn, key = { it.name }) { entry ->
                 ToolCard(
                     entry = entry,

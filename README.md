@@ -18,7 +18,7 @@ Android 手机端的 AI Agent Harness：本地模型与在线模型自由切换�
 
 **Agent 与工具**
 - 内置工具：`web_search`（Bing / DuckDuckGo / Tavily / Brave）、`web_fetch`、`http_request`、`notion`
-- Android 工具：截图、剪贴板、文件读写与搜索（SAF 授权目录）、应用列表 / 启动 / 信息、打开链接、发送 Intent、设备信息
+- Android 工具：剪贴板、文件读写与搜索（SAF 授权目录）、应用列表 / 启动 / 信息、打开链接、发送 Intent、设备信息
 - 系统工具：闹钟 / 倒计时、日历（查询与读写，未授权时降级为系统日历预填新建）、联系人搜索、定位、拨号、音量、手电筒、拍照、录音
 - 日历 / 联系人 / 定位 / 电话 / 麦克风权限集中在「模型 → 工具 → 系统权限」申请；未授权时工具会返回可操作的提示
 - MCP：通过 HTTP / SSE 接入 MCP server，工具自动注册
@@ -62,7 +62,7 @@ mobile-agent/
 │   └── src/main/kotlin/com/mynok/myagent/
 │       ├── data/             Room、DataStore、加密密钥存储
 │       ├── di/               手写依赖容器
-│       ├── tools/android/    截图、文件、应用等系统工具
+│       ├── tools/android/    文件、应用等系统工具
 │       └── ui/               对话 / 模型 / 工具 / 技能 / 设置
 ├── core/                     纯 JVM：AgentLoop、ContextEngine、模型适配、内置工具、MCP
 │   └── src/test/kotlin/      单元测试

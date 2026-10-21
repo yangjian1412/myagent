@@ -21,7 +21,7 @@ data class ToolResult(
     /** 文本结果，会回灌给模型。 */
     val content: String,
     val isError: Boolean = false,
-    /** 工具可能返回图片（例如截图），供视觉模型消费。 */
+    /** 工具可能返回图片（例如拍照），供视觉模型消费。 */
     val images: List<ContentPart.Image> = emptyList(),
 ) {
     companion object {

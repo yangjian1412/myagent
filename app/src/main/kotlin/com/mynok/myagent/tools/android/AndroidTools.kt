@@ -3,9 +3,6 @@ package com.mynok.myagent.tools.android
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.graphics.Bitmap
-import android.util.Base64
-import com.mynok.myagent.core.model.ContentPart
 import com.mynok.myagent.core.model.ToolSpec
 import com.mynok.myagent.core.tools.FileWorkspace
 import com.mynok.myagent.core.tools.Tool
@@ -21,62 +18,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import java.io.ByteArrayOutputStream
-
-/**
- * 截屏工具：把当前屏幕交给视觉模型。
- */
-class ScreenshotTool : Tool {
-
-    override val spec = ToolSpec(
-        name = "screenshot",
-        description = "截取当前手机屏幕并返回图片。可用于「看看屏幕上是什么」「这个界面怎么操作」这类问题。",
-        parameters = buildJsonObject {
-            put("type", "object")
-            put("properties", buildJsonObject { })
-            put("required", buildJsonArray { })
-        },
-    )
-
-    override val risk = ToolRisk.READ_ONLY
-
-    override suspend fun execute(args: JsonObject, ctx: ToolContext): ToolResult {
-        val service = ProjectionService.instance
-            ?: return ToolResult.error(
-                "还没有开启屏幕共享。请让用户在「模型 → 工具」页面点击「屏幕共享」并允许授权，然后重试。",
-            )
-        val bitmap = runCatching { service.capture() }.getOrNull()
-            ?: return ToolResult.error("截屏失败：没有取到画面")
-        val scaled = scaleDown(bitmap, 1568)
-        val out = ByteArrayOutputStream()
-        scaled.compress(Bitmap.CompressFormat.JPEG, 85, out)
-        val base64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
-        return ToolResult(
-            content = "已截取屏幕（${scaled.width}x${scaled.height}）。",
-            images = listOf(
-                ContentPart.Image(
-                    mimeType = "image/jpeg",
-                    base64 = base64,
-                    displayName = "screenshot.jpg",
-                ),
-            ),
-        )
-    }
-
-    private fun scaleDown(bitmap: Bitmap, maxEdge: Int): Bitmap {
-        val w = bitmap.width
-        val h = bitmap.height
-        val longest = maxOf(w, h)
-        if (longest <= maxEdge) return bitmap
-        val ratio = maxEdge.toFloat() / longest
-        return Bitmap.createScaledBitmap(
-            bitmap,
-            (w * ratio).toInt().coerceAtLeast(1),
-            (h * ratio).toInt().coerceAtLeast(1),
-            true,
-        )
-    }
-}
 
 /**
  * 剪贴板工具。

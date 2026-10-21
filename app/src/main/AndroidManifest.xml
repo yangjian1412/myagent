@@ -4,6 +4,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- 设置闹钟/计时器：时钟应用会检查这个普通权限，缺失时可能只打开界面 -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <!-- 列出/启动任意已安装应用需要包可见性；个人侧载工具，不面向 Play 商店 -->
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"

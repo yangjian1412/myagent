@@ -1,6 +1,6 @@
 # MyAgent 架构说明
 
-版本：`0.1.0beta2`　包名：`com.mynok.myagent`
+版本：`0.1.0beta3`　包名：`com.mynok.myagent`
 
 手机端 AI Agent harness。核心目标：**本地模型与在线模型可自由切换**，具备工具调用、MCP 接入、会话分支、多模态识图能力，并尽量把可测逻辑放进纯 JVM 模块。
 
@@ -181,6 +181,7 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 | 3 | 会话加 `reasoningEffort` / `showReasoning`，消息加 `reasoning` |
 | 4 | 模型档案加 `reasoningLevels`（幂等迁移，兼容已升到 v3 的库） |
 | 5 | 会话加 `showToolCalls`（幂等迁移，默认显示，老会话行为不变） |
+| 6 | 会话加 `maxSteps`（单次回复最大工具轮数，默认 8，范围 4–32） |
 
 ### 6.2 设置
 
@@ -198,15 +199,17 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 
 三个一级标签：**对话 / 模型 / 设置**。
 
-- 手机（< 600dp）：底部 `NavigationBar` + `ModalNavigationDrawer` 历史抽屉（仅对话页可手势拉出）
-- 平板（≥ 600dp）：`NavigationRail` + 常驻会话侧栏
+- 手机/窄窗口（< 840dp）：底部 `NavigationBar` + `ModalNavigationDrawer` 历史抽屉（仅对话页可手势拉出）
+- 平板/宽窗口（≥ 840dp）：`NavigationRail` + 常驻会话侧栏；「模型」页的三个子项（模型配置 / 工具 / 技能）也改为左侧常驻列表，交互与历史对话一致
+- 全窗口 edge-to-edge：手机分支由 `Scaffold` 的 content insets 让开系统栏，平板分支显式用 `WindowInsets.systemBars ∪ displayCutout` 处理；状态栏/导航栏图标明暗跟随 App 内主题，而不是系统深色模式
 
 对话页顶部：左上角汉堡按钮（历史）、右上角 `Tune`（对话设置）与新建。
 
 ### 7.2 对话设置面板
 
-底部弹层 `ConversationSettingsSheet`：换模型、换思考强度（只列当前模型支持的档位）、是否展示思考过程、是否展示工具调用、上下文检查器入口。
+底部弹层 `ConversationSettingsSheet`：换模型、换思考强度（只列当前模型支持的档位）、是否展示思考过程、是否展示工具调用、最大步数（4–32）、上下文检查器入口。
 关闭工具调用展示后，工具结果消息、调用 chip 与实时轨迹都不再渲染，只保留模型的最终回复。
+最大步数是会话级的单次回复工具轮数上限，默认 8；调高能跑更长的工具链，代价是更多 token 与更慢的返回。
 
 ### 7.3 主题
 

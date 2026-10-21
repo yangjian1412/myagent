@@ -48,6 +48,7 @@ class ConversationRepository(
         title: String = "新会话",
         modelProfileId: String? = null,
         systemPrompt: String? = null,
+        maxSteps: Int = 8,
     ): String {
         val id = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
@@ -59,6 +60,7 @@ class ConversationRepository(
                 updatedAt = now,
                 modelProfileId = modelProfileId,
                 systemPrompt = systemPrompt,
+                maxSteps = maxSteps,
             ),
         )
         return id
@@ -92,6 +94,9 @@ class ConversationRepository(
 
     suspend fun setConversationShowToolCalls(id: String, show: Boolean) =
         conversationDao.setShowToolCalls(id, show)
+
+    suspend fun setConversationMaxSteps(id: String, steps: Int) =
+        conversationDao.setMaxSteps(id, steps)
 
     suspend fun setActiveLeaf(conversationId: String, leafId: String?) {
         val conv = conversationDao.get(conversationId) ?: return

@@ -14,7 +14,7 @@ import androidx.room.RoomDatabase
         ToolPolicyEntity::class,
         SkillEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class MyAgentDatabase : RoomDatabase() {
@@ -37,7 +37,7 @@ abstract class MyAgentDatabase : RoomDatabase() {
                     MyAgentDatabase::class.java,
                     "myagent.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                     .also { instance = it }
@@ -105,6 +105,21 @@ abstract class MyAgentDatabase : RoomDatabase() {
                 if (!db.hasColumn("conversations", "showToolCalls")) {
                     db.execSQL(
                         "ALTER TABLE `conversations` ADD COLUMN `showToolCalls` INTEGER NOT NULL DEFAULT 1",
+                    )
+                }
+            }
+        }
+
+        /**
+         * v5 → v6：会话增加「最大步数」，范围 4–32，默认 8。
+         *
+         * 老会话保持原来的 8 步行为；同样做幂等判断。
+         */
+        val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                if (!db.hasColumn("conversations", "maxSteps")) {
+                    db.execSQL(
+                        "ALTER TABLE `conversations` ADD COLUMN `maxSteps` INTEGER NOT NULL DEFAULT 8",
                     )
                 }
             }

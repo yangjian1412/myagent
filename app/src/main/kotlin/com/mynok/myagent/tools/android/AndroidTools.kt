@@ -43,7 +43,7 @@ class ScreenshotTool : Tool {
     override suspend fun execute(args: JsonObject, ctx: ToolContext): ToolResult {
         val service = ProjectionService.instance
             ?: return ToolResult.error(
-                "还没有开启屏幕共享。请在弹出的授权请求里允许「屏幕共享」，再重试。",
+                "还没有开启屏幕共享。请让用户在「模型 → 工具」页面点击「屏幕共享」并允许授权，然后重试。",
             )
         val bitmap = runCatching { service.capture() }.getOrNull()
             ?: return ToolResult.error("截屏失败：没有取到画面")

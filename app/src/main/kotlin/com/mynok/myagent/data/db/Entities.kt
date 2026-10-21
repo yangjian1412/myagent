@@ -28,6 +28,8 @@ data class ConversationEntity(
     val showReasoning: Boolean = true,
     /** 是否在对话里展示工具调用过程与结果。 */
     val showToolCalls: Boolean = true,
+    /** 单次回复最多执行多少轮工具调用（4–32）。 */
+    val maxSteps: Int = 8,
 )
 
 /**

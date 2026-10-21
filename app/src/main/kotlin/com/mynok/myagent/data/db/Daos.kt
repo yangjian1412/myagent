@@ -49,6 +49,9 @@ interface ConversationDao {
     @Query("UPDATE conversations SET showToolCalls = :show WHERE id = :id")
     suspend fun setShowToolCalls(id: String, show: Boolean)
 
+    @Query("UPDATE conversations SET maxSteps = :steps WHERE id = :id")
+    suspend fun setMaxSteps(id: String, steps: Int)
+
     @Query("UPDATE conversations SET pinned = :pinned WHERE id = :id")
     suspend fun setPinned(id: String, pinned: Boolean)
 

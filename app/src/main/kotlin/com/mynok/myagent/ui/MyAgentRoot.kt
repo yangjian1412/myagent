@@ -1,19 +1,26 @@
 package com.mynok.myagent.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -44,6 +51,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -177,62 +185,79 @@ fun MyAgentRoot(container: AppContainer) {
         )
     }
 
+    val modelTabContent: @Composable () -> Unit = {
+        when (modelTab) {
+            ModelTab.PROFILES -> ModelsScreen(
+                state = modelsState,
+                onSave = { id, name, type, baseUrl, modelId, key, cw, maxOut, tools, vision, temp, levels ->
+                    modelsVm.save(
+                        id, name, type, baseUrl, modelId, key, cw, maxOut,
+                        tools, vision, temp, levels,
+                    )
+                },
+                onDelete = { modelsVm.delete(it) },
+                onProbe = { modelsVm.probe(it) },
+                catalog = modelsState.catalog,
+                onFetchModels = { type, url, key, secretId ->
+                    modelsVm.fetchModels(type, url, key, secretId)
+                },
+                onResetCatalog = { modelsVm.resetCatalog() },
+                onClearMessage = { modelsVm.clearMessage() },
+            )
+
+            ModelTab.TOOLS -> ToolsScreen(
+                state = toolsState,
+                onAddMcp = { n, u, t -> toolsVm.addMcpServer(n, u, t) },
+                onRemoveMcp = { toolsVm.removeMcpServer(it) },
+                onSyncMcp = { toolsVm.syncMcp() },
+                onGrantDirectory = {
+                    activity?.requestDirectory { uris -> toolsVm.grantDirectories(uris) }
+                },
+                onRequestScreenCapture = { activity?.requestScreenCapture() },
+                onSetToolEnabled = { name, enabled -> toolsVm.setToolEnabled(name, enabled) },
+                onSetToolApproval = { name, require, risk ->
+                    toolsVm.setToolRequireApproval(name, require, risk)
+                },
+                authorizedRoots = container.workspace.roots().map { it.displayName },
+                onSaveSecret = { name, value -> toolsVm.saveSecret(name, value) },
+            )
+
+            ModelTab.SKILLS -> SkillsScreen(
+                skills = toolsState.skills,
+                onSave = { id, name, desc, prompt, force ->
+                    toolsVm.saveSkill(id, name, desc, prompt, force)
+                },
+                onDelete = { toolsVm.deleteSkill(it) },
+            )
+        }
+    }
+
     val modelsPane: @Composable () -> Unit = {
-        Column(modifier = Modifier.fillMaxSize()) {
-            PrimaryTabRow(selectedTabIndex = modelTab.ordinal) {
-                ModelTab.entries.forEach { tab ->
-                    Tab(
-                        selected = modelTab == tab,
-                        onClick = { modelTab = tab },
-                        text = { Text(tab.label) },
-                    )
-                }
+        if (isExpanded) {
+            // 平板：三个子项做成左侧列表，和「历史对话」一样是常驻侧栏
+            Row(modifier = Modifier.fillMaxSize()) {
+                ModelTabsPane(
+                    selected = modelTab,
+                    onSelect = { modelTab = it },
+                    modifier = Modifier
+                        .width(220.dp)
+                        .fillMaxHeight(),
+                )
+                VerticalDivider()
+                Box(modifier = Modifier.weight(1f)) { modelTabContent() }
             }
-            Box(modifier = Modifier.weight(1f)) {
-                when (modelTab) {
-                    ModelTab.PROFILES -> ModelsScreen(
-                        state = modelsState,
-                        onSave = { id, name, type, baseUrl, modelId, key, cw, maxOut, tools, vision, temp, levels ->
-                            modelsVm.save(
-                                id, name, type, baseUrl, modelId, key, cw, maxOut,
-                                tools, vision, temp, levels,
-                            )
-                        },
-                        onDelete = { modelsVm.delete(it) },
-                        onProbe = { modelsVm.probe(it) },
-                        catalog = modelsState.catalog,
-                        onFetchModels = { type, url, key, secretId ->
-                            modelsVm.fetchModels(type, url, key, secretId)
-                        },
-                        onResetCatalog = { modelsVm.resetCatalog() },
-                        onClearMessage = { modelsVm.clearMessage() },
-                    )
-
-                    ModelTab.TOOLS -> ToolsScreen(
-                        state = toolsState,
-                        onAddMcp = { n, u, t -> toolsVm.addMcpServer(n, u, t) },
-                        onRemoveMcp = { toolsVm.removeMcpServer(it) },
-                        onSyncMcp = { toolsVm.syncMcp() },
-                        onGrantDirectory = {
-                            activity?.requestDirectory { uris -> toolsVm.grantDirectories(uris) }
-                        },
-                        onRequestScreenCapture = { activity?.requestScreenCapture() },
-                        onSetToolEnabled = { name, enabled -> toolsVm.setToolEnabled(name, enabled) },
-                        onSetToolApproval = { name, require, risk ->
-                            toolsVm.setToolRequireApproval(name, require, risk)
-                        },
-                        authorizedRoots = container.workspace.roots().map { it.displayName },
-                        onSaveSecret = { name, value -> toolsVm.saveSecret(name, value) },
-                    )
-
-                    ModelTab.SKILLS -> SkillsScreen(
-                        skills = toolsState.skills,
-                        onSave = { id, name, desc, prompt, force ->
-                            toolsVm.saveSkill(id, name, desc, prompt, force)
-                        },
-                        onDelete = { toolsVm.deleteSkill(it) },
-                    )
+        } else {
+            Column(modifier = Modifier.fillMaxSize()) {
+                PrimaryTabRow(selectedTabIndex = modelTab.ordinal) {
+                    ModelTab.entries.forEach { tab ->
+                        Tab(
+                            selected = modelTab == tab,
+                            onClick = { modelTab = tab },
+                            text = { Text(tab.label) },
+                        )
+                    }
                 }
+                Box(modifier = Modifier.weight(1f)) { modelTabContent() }
             }
         }
     }
@@ -280,6 +305,11 @@ fun MyAgentRoot(container: AppContainer) {
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    // 平板分支没有 Scaffold，系统栏 inset 要自己处理；
+                    // 顶部状态栏、刘海和底部手势条都在这里让开。
+                    .windowInsetsPadding(
+                        WindowInsets.systemBars.union(WindowInsets.displayCutout),
+                    )
                     .imePadding(),
             ) { pageContent() }
         }
@@ -298,6 +328,8 @@ fun MyAgentRoot(container: AppContainer) {
             },
         ) {
             Scaffold(
+                // 系统栏 + 刘海都让开；键盘由下面的 imePadding 处理
+                contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
                 bottomBar = {
                     NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -341,10 +373,12 @@ fun MyAgentRoot(container: AppContainer) {
             reasoningEffort = chatState.reasoningEffort,
             showReasoning = chatState.showReasoning,
             showToolCalls = chatState.showToolCalls,
+            maxSteps = chatState.maxSteps,
             onSelectModel = { chatVm.selectModel(it) },
             onReasoningEffort = { chatVm.setReasoningEffort(it) },
             onShowReasoning = { chatVm.setShowReasoning(it) },
             onShowToolCalls = { chatVm.setShowToolCalls(it) },
+            onMaxSteps = { chatVm.setMaxSteps(it) },
             onShowContext = {
                 showConversationSettings = false
                 chatVm.showContextInspector()
@@ -508,6 +542,61 @@ private fun ChatLayout(
             },
             dismissButton = { TextButton(onClick = { editingIndex = -1 }) { Text("取消") } },
         )
+    }
+}
+
+/** 平板上的「模型」子导航：和会话列表一样常驻在左侧。 */
+@Composable
+private fun ModelTabsPane(
+    selected: ModelTab,
+    onSelect: (ModelTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text("模型设置", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "配置、工具与技能",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        HorizontalDivider()
+        Spacer(Modifier.height(8.dp))
+        ModelTab.entries.forEach { tab ->
+            val active = tab == selected
+            Surface(
+                color = if (active) {
+                    MaterialTheme.colorScheme.secondaryContainer
+                } else {
+                    Color.Transparent
+                },
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(tab) }
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        tab.label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (active) {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -39,7 +39,7 @@ import com.mynok.myagent.data.repo.ThemeColor
 import com.mynok.myagent.data.repo.ThemeMode
 
 /** 当前版本号。 */
-const val APP_VERSION = "0.1.0beta2"
+const val APP_VERSION = "0.1.0beta3"
 
 @Composable
 fun SettingsScreen(

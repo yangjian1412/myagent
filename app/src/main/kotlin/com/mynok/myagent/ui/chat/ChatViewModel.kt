@@ -26,6 +26,22 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+/** 单次回复允许的工具调用轮数范围。 */
+const val MIN_AGENT_STEPS = 4
+const val MAX_AGENT_STEPS = 32
+const val DEFAULT_AGENT_STEPS = 8
+
+/**
+ * Android 端的能力边界。
+ *
+ * 模型遇到「做不到」时容易反复试工具或擅自打开系统设置页，
+ * 所以把边界写进系统提示，让它直接说明限制。
+ */
+private const val DEVICE_CAPABILITIES = "你运行在 Android 手机上。工具能力边界：" +
+    "可以列出/启动已安装应用、读写剪贴板、在用户授权后截屏、访问用户授权的目录；" +
+    "无法读取通知、无法模拟点击或操作其他 App 的界面、无法直接修改系统设置。" +
+    "做不到时直接说明原因和建议，不要反复调用工具，也不要擅自打开系统设置页。"
+
 /** 一次工具调用的可视化记录。 */
 data class ToolTrace(
     val id: String,
@@ -60,6 +76,8 @@ data class ChatUiState(
     val showReasoning: Boolean = true,
     /** 是否展示工具调用过程与结果。 */
     val showToolCalls: Boolean = true,
+    /** 单次回复最多执行多少轮工具调用（4–32）。 */
+    val maxSteps: Int = DEFAULT_AGENT_STEPS,
     /** 正在流式输出的思考内容。 */
     val streamingReasoning: String = "",
 ) {
@@ -153,6 +171,8 @@ class ChatViewModel(
                     reasoningEffort = if (effort in supported) effort else ReasoningEffort.OFF,
                     showReasoning = conv?.showReasoning ?: true,
                     showToolCalls = conv?.showToolCalls ?: true,
+                    maxSteps = (conv?.maxSteps ?: DEFAULT_AGENT_STEPS)
+                        .coerceIn(MIN_AGENT_STEPS, MAX_AGENT_STEPS),
                     streamingReasoning = "",
                     traces = emptyList(),
                     error = null,
@@ -180,6 +200,7 @@ class ChatViewModel(
                     reasoningEffort = ReasoningEffort.OFF,
                     showReasoning = true,
                     showToolCalls = true,
+                    maxSteps = DEFAULT_AGENT_STEPS,
                 )
             }
         }
@@ -240,6 +261,14 @@ class ChatViewModel(
         viewModelScope.launch { repo.setConversationShowToolCalls(convId, show) }
     }
 
+    /** 设置本会话的最大执行步数，范围 4–32。 */
+    fun setMaxSteps(steps: Int) {
+        val value = steps.coerceIn(MIN_AGENT_STEPS, MAX_AGENT_STEPS)
+        _state.update { it.copy(maxSteps = value) }
+        val convId = _state.value.conversationId ?: return
+        viewModelScope.launch { repo.setConversationMaxSteps(convId, value) }
+    }
+
     fun setSystemPrompt(prompt: String?) {
         _state.update { it.copy(systemPrompt = prompt) }
         val convId = _state.value.conversationId
@@ -255,7 +284,12 @@ class ChatViewModel(
         if (content.isEmpty() || _state.value.isStreaming) return
         viewModelScope.launch {
             val convId = _state.value.conversationId ?: run {
-                val id = repo.createConversation(modelProfileId = _state.value.currentModelId)
+                val id = repo.createConversation(
+                    modelProfileId = _state.value.currentModelId,
+                    // 新会话还没进数据库时，用户在设置面板里选的步数也要带上
+                    maxSteps = _state.value.maxSteps
+                        .coerceIn(MIN_AGENT_STEPS, MAX_AGENT_STEPS),
+                )
                 _state.update { it.copy(conversationId = id) }
                 id
             }
@@ -364,7 +398,7 @@ class ChatViewModel(
         val system = SystemPrompt.build(
             agentName = appSettings.agentName,
             preferences = appSettings.agentPreferences,
-            extraPrompts = listOf(_state.value.systemPrompt, skill?.prompt),
+            extraPrompts = listOf(DEVICE_CAPABILITIES, _state.value.systemPrompt, skill?.prompt),
         )
         val allowedTools = skill?.forceTools
             ?.split(',')
@@ -407,6 +441,8 @@ class ChatViewModel(
                     reasoningEffort = _state.value.reasoningEffort
                         .takeIf { it in _state.value.supportedReasoningEfforts }
                         ?: ReasoningEffort.OFF,
+                    stepsLimit = _state.value.maxSteps
+                        .coerceIn(MIN_AGENT_STEPS, MAX_AGENT_STEPS),
                 ).collect { event ->
                     when (event) {
                         is AgentEvent.ContextReady ->

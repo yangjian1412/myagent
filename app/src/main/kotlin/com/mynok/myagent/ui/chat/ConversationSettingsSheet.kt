@@ -23,10 +23,15 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mynok.myagent.core.model.ReasoningEffort
 import com.mynok.myagent.data.db.ModelProfileEntity
+import kotlin.math.roundToInt
 
 /**
  * 对话设置面板。
@@ -49,10 +55,12 @@ fun ConversationSettingsSheet(
     reasoningEffort: ReasoningEffort,
     showReasoning: Boolean,
     showToolCalls: Boolean,
+    maxSteps: Int,
     onSelectModel: (String) -> Unit,
     onReasoningEffort: (ReasoningEffort) -> Unit,
     onShowReasoning: (Boolean) -> Unit,
     onShowToolCalls: (Boolean) -> Unit,
+    onMaxSteps: (Int) -> Unit,
     onShowContext: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -188,6 +196,9 @@ fun ConversationSettingsSheet(
                 Switch(checked = showToolCalls, onCheckedChange = onShowToolCalls)
             }
 
+            Spacer(Modifier.height(16.dp))
+            StepsSection(maxSteps = maxSteps, onMaxSteps = onMaxSteps)
+
             Spacer(Modifier.height(14.dp))
             HorizontalDivider()
             Spacer(Modifier.height(14.dp))
@@ -202,6 +213,38 @@ fun ConversationSettingsSheet(
             }
         }
     }
+}
+
+@Composable
+private fun StepsSection(maxSteps: Int, onMaxSteps: (Int) -> Unit) {
+    var steps by remember(maxSteps) {
+        mutableIntStateOf(maxSteps.coerceIn(MIN_AGENT_STEPS, MAX_AGENT_STEPS))
+    }
+
+    Label("最大步数")
+    Spacer(Modifier.height(6.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("单次回复最多执行多少轮工具调用", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "范围 $MIN_AGENT_STEPS–$MAX_AGENT_STEPS，默认 $DEFAULT_AGENT_STEPS",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            "$steps",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+    Slider(
+        value = steps.toFloat(),
+        onValueChange = { steps = it.roundToInt() },
+        valueRange = MIN_AGENT_STEPS.toFloat()..MAX_AGENT_STEPS.toFloat(),
+        steps = MAX_AGENT_STEPS - MIN_AGENT_STEPS - 1,
+        onValueChangeFinished = { onMaxSteps(steps) },
+    )
 }
 
 @Composable

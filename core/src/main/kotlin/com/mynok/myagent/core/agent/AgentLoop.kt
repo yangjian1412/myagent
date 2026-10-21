@@ -81,6 +81,8 @@ class AgentLoop(
         allowedTools: Set<String>? = null,
         /** 思考强度。 */
         reasoningEffort: ReasoningEffort = ReasoningEffort.OFF,
+        /** 本次执行的最大轮数；默认沿用构造时的设置，对话页可按会话覆盖。 */
+        stepsLimit: Int = maxSteps,
     ): Flow<AgentEvent> = flow {
         val working = history.map { it.message }.toMutableList()
         working += userMessage
@@ -110,7 +112,7 @@ class AgentLoop(
             summarizer = { messages -> summarize(provider, messages, system) },
         ).messages
 
-        while (step < maxSteps) {
+        while (step < stepsLimit) {
             emit(
                 AgentEvent.ContextReady(
                     AssembledContext(
@@ -212,7 +214,7 @@ class AgentLoop(
 
         emit(
             AgentEvent.Failed(
-                IllegalStateException("已达到最大执行步数（$maxSteps），任务中止。可提高步数上限或缩小任务范围。"),
+                IllegalStateException("已达到最大执行步数（$stepsLimit），任务中止。可提高步数上限或缩小任务范围。"),
             ),
         )
     }

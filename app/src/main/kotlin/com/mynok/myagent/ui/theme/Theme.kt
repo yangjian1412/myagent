@@ -1,5 +1,8 @@
 package com.mynok.myagent.ui.theme
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
@@ -9,8 +12,11 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import com.mynok.myagent.data.repo.ThemeColor
 import com.mynok.myagent.data.repo.ThemeMode
 
@@ -162,9 +168,32 @@ fun MyAgentTheme(
         else -> lightSchemeFrom(seed)
     }
 
+    // 状态栏/导航栏是透明的（edge-to-edge），图标明暗必须跟随 App 内的主题，
+    // 不能跟系统深色模式走：用户把 App 强制成浅色时，白色图标会看不见。
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = view.context.findActivity()?.window ?: return@SideEffect
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !darkTheme
+                isAppearanceLightNavigationBars = !darkTheme
+            }
+        }
+    }
+
     MaterialTheme(
         colorScheme = colorScheme,
         typography = MyAgentTypography,
         content = content,
     )
+}
+
+/** 从 Compose 的 Context 往上找到宿主 Activity（可能被 ContextThemeWrapper 包了几层）。 */
+private fun Context.findActivity(): Activity? {
+    var current: Context = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
 }

@@ -190,7 +190,7 @@ object AppTools {
     fun sendIntent(context: Context): Tool = object : Tool {
         override val spec = ToolSpec(
             name = "send_intent",
-            description = "发送一个 Android Intent：可打开系统设置页或按 action 启动应用。常用 action：android.settings.SETTINGS（设置）、android.intent.action.VIEW（带 url 打开）、android.settings.APP_SETTINGS。",
+            description = "发送一个 Android Intent。只在用户明确要求打开设置页或某个页面时使用，不要用它试探或绕过系统权限。常用 action：android.settings.SETTINGS（设置）、android.settings.APPLICATION_DETAILS_SETTINGS、android.intent.action.VIEW（带 url 打开）。",
             parameters = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {

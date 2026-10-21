@@ -317,6 +317,33 @@ class AgentLoopTest {
     }
 
     @Test
+    fun `单次执行可以覆盖构造时的最大步数`() = runTest {
+        val tool = RecordingTool(toolSpec()) { ToolResult.ok("ok") }
+        val registry = ToolRegistry().apply { register(tool) }
+        val provider = ScriptedProvider(
+            listOf(
+                listOf(toolCall(arguments = "{}")),
+                listOf(toolCall(arguments = "{}")),
+                listOf(text("完成"), ModelEvent.Completed(FinishReason.STOP)),
+            ),
+        )
+
+        val events = AgentLoop(registry, maxSteps = 1).run(
+            provider = provider,
+            history = emptyList(),
+            system = "系统提示",
+            userMessage = ChatMessage.user("开始"),
+            toolContext = FakeToolContext(approver = ToolApprover { true }),
+            budget = budget,
+            stepsLimit = 3,
+        ).toList()
+
+        assertEquals(2, tool.calls.size)
+        assertTrue("最后应是 Done 事件", events.last() is AgentEvent.Done)
+        assertEquals(3, (events.last() as AgentEvent.Done).steps)
+    }
+
+    @Test
     fun `工具需要审批且审批被拒时不执行工具`() = runTest {
         val tool = RecordingTool(
             spec = toolSpec(),

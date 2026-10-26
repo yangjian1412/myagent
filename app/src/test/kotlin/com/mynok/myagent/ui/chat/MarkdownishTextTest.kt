@@ -89,4 +89,11 @@ class MarkdownishTextTest {
         setContent("```\necho hi\n```")
         compose.onNodeWithText("echo hi").assertExists()
     }
+
+    @Test
+    fun `正文在可选中容器里`() {
+        // 走的是 SelectionContainer：长按能选中、能复制
+        setContent("这一段应该可以被选中复制")
+        compose.onNodeWithText("这一段应该可以被选中复制").assertExists()
+    }
 }

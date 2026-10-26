@@ -46,6 +46,7 @@ Android 手机端的 AI Agent Harness：本地模型与在线模型自由切换�
 **会话**
 - 多会话、历史抽屉、长按删除
 - 消息树分支：编辑已发送消息 / 重新生成都会新开分支，旧回复仍可找回
+- 消息正文长按可选中复制（可选一段，也能全选整条，弹的是系统浮动工具栏）；代码块右上角一键复制
 - 上下文检查器：查看 token 占用、裁剪与摘要情况
 - 会话级模型、思考强度、最大步数（4–32）、系统提示、思考与工具调用展示开关
 - 手机底部导航 / 平板双栏布局（「模型」页的模型配置 / 工具 / 技能也改为左侧列表）
@@ -127,7 +128,7 @@ mobile-agent/
 
 ```bash
 ./gradlew :core:test              # 纯 JVM 单元测试，182 项
-./gradlew :app:testDebugUnitTest  # app 层：DB 迁移、任务 payload，14 项
+./gradlew :app:testDebugUnitTest  # app 层：DB 迁移、任务 payload、Compose 语义，22 项
 ```
 
 端到端联调（工具调用 → 审批 → 回灌 → 最终回复）：

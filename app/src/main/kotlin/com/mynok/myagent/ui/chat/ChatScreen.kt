@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BugReport
@@ -206,7 +207,7 @@ private fun ReasoningBlock(text: String, live: Boolean) {
                 )
             }
             Spacer(Modifier.height(4.dp))
-            SelectionContainer {
+            SelectableBody {
                 Text(
                     text,
                     style = MaterialTheme.typography.bodySmall,
@@ -368,7 +369,7 @@ private fun ToolResultBubble(message: ChatMessage) {
                 )
             }
             Spacer(Modifier.height(4.dp))
-            SelectionContainer {
+            SelectableBody {
                 Text(
                     message.text.take(600),
                     style = MaterialTheme.typography.bodySmall,
@@ -478,10 +479,30 @@ private fun FilePlaceholder(file: ContentPart.File) {
 }
 
 /**
+ * 可选中的正文。
+ *
+ * 长按能选中文字、局部复制，也能「全选」整条。
+ *
+ * 用的是 foundation 的 [SelectionContainer]：它弹出来的是真正的
+ * `android.view.ActionMode`，浮动窗口由系统绘制（剪切 / 复制 / 粘贴 / 全选 / 分享）。
+ *
+ * 想要 Android 13+ 那种带「智能选词 / 翻译 / 搜索」的系统菜单，得走
+ * `CommonContextMenuArea` + 平台的 `TextClassificationHelper`——但那两个在
+ * Compose 1.12 里都是 internal，应用模块用不了，所以暂时只能到经典这一档。
+ */
+@Composable
+private fun SelectableBody(content: @Composable () -> Unit) {
+    val state = rememberSelectionState()
+    SelectionContainer(state) {
+        content()
+    }
+}
+
+/**
  * 轻量 Markdown 渲染：只处理代码块、行内换行与可点链接。
  *
  * 链接用 [LinkAnnotation.Url] 标出来，点一下交给系统处理（浏览器、地图、拨号盘都算）。
- * 整段包在 [SelectionContainer] 里：长按能选中文字、局部复制，也能「全选」整条。
+ * 整段包在 [SelectableBody] 里：长按能选中文字、局部复制，也能「全选」整条。
  */
 @Composable
 fun MarkdownishText(text: String, color: Color) {
@@ -494,7 +515,7 @@ fun MarkdownishText(text: String, color: Color) {
             Toast.makeText(context, "没有应用能打开这个链接", Toast.LENGTH_SHORT).show()
         }
     }
-    SelectionContainer {
+    SelectableBody {
         Column {
             segments.forEach { seg ->
                 if (seg.isCode) {

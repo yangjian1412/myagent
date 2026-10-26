@@ -293,6 +293,12 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 
 - 气泡正文走 `MarkdownishText`：只认代码块、换行与网址，不为了这点需求引完整 Markdown 渲染库
 - 网址用 `LinkAnnotation.Url` 标成可点链接，点击交给 `LocalUriHandler`（浏览器、地图、拨号盘都算）。模型写出来的网址不一定规矩，所以结尾的中英文标点不算网址的一部分，打不开也只提示、不抛异常
+- 正文用 foundation 的 `SelectionContainer` 包起来：长按能选中文字、局部复制，也能「全选」整条。弹出来的是真正的 `android.view.ActionMode`，浮动窗口由系统绘制。选不中跨气泡（`LazyColumn` 的限制，业界通病），但单条内随便选
+  - 想再要 Android 13+ 那种带「智能选词 / 翻译 / 搜索」的系统菜单，得走 Compose 的 `CommonContextMenuArea` + 平台 `TextClassificationHelper`，但这两处在 Compose 1.12 里都是 internal，应用模块用不了，所以目前到经典那一档为止
+- 代码块右上角有复制按钮，写剪贴板后 Toast 一句。按钮自己用 `DisableSelection` 包住，免得长按它变成选文本
+- 代码块正文用软换行而不是横向滚动：横向可滚的子视图容易被系统长截图的滚动识别和拼接搞乱，软换行顺带让长行不被截断
+- ```kotlin 这类语言标记会被摘出来当代码块标题，不混进代码正文
+- 消息流只在**用户本来就贴着底部**时才跟着新内容滚动。否则模型流式输出会把人硬拽回底部：想翻历史看不了，系统的长截图也没法往上滚着截
 - 附件在气泡里是「文件名 + 类型 + 体积」的占位条（图片也一样），不引图片加载库
 - 输入区两个按钮：加图片、加文件；附件 chip 点一下即移除；只有附件没打字时也能发，会话标题用文件名兜底
 
@@ -324,7 +330,7 @@ API key 不落库：`ModelProfileEntity.secretId` 指向 `SecretStore`，由 And
 
 | 取舍 | 原因 |
 |---|---|
-| `core` 纯 JVM | 协议逻辑、cron、技能解析都能脱离设备快速回归；目前 `:core:test` 182 项、`:app:testDebugUnitTest` 14 项 |
+| `core` 纯 JVM | 协议逻辑、cron、技能解析都能脱离设备快速回归；目前 `:core:test` 182 项、`:app:testDebugUnitTest` 22 项 |
 | 自研 SSE / MCP | 需要精确控制流式增量与审批时机，第三方库封装过深 |
 | 消息树而非线性列表 | 编辑与重生成必须保留旧分支，否则用户无法回溯 |
 | 思考档位写在模型档案 | 各家档位不一致，全局枚举无法表达 |

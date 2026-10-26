@@ -1,9 +1,11 @@
 package com.mynok.myagent.ui.chat
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,14 +20,16 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
@@ -46,6 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -91,8 +96,28 @@ fun MessageList(
         }
     }
     val total = visible.size + if (isStreaming) 1 else 0
+
+    // 只有用户本来就贴着底部时才跟着滚。
+    // 否则模型流式输出会把人硬拽回底部：想翻历史看不了，
+    // 系统的长截图也没法往上滚着截。
+    val atBottom by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val items = info.visibleItemsInfo
+            if (items.isEmpty()) {
+                // 还没排版，先当作贴着底部，免得第一条消息不自动上屏
+                true
+            } else {
+                val last = items.last()
+                last.index == info.totalItemsCount - 1 &&
+                    last.offset + last.size <= info.viewportEndOffset + 1
+            }
+        }
+    }
+
     LaunchedEffect(total, streamingText.length) {
-        if (total > 0) {
+        // atBottom 在协程里读，不会成为 effect 的 key（否则会自激）
+        if (total > 0 && atBottom) {
             runCatching { listState.animateScrollToItem((total - 1).coerceAtLeast(0)) }
         }
     }
@@ -181,13 +206,15 @@ private fun ReasoningBlock(text: String, live: Boolean) {
                 )
             }
             Spacer(Modifier.height(4.dp))
-            Text(
-                text,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = if (expanded) Int.MAX_VALUE else 3,
-                overflow = TextOverflow.Ellipsis,
-            )
+            SelectionContainer {
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (expanded) Int.MAX_VALUE else 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -341,13 +368,15 @@ private fun ToolResultBubble(message: ChatMessage) {
                 )
             }
             Spacer(Modifier.height(4.dp))
-            Text(
-                message.text.take(600),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 12,
-                overflow = TextOverflow.Ellipsis,
-            )
+            SelectionContainer {
+                Text(
+                    message.text.take(600),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 12,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -452,6 +481,7 @@ private fun FilePlaceholder(file: ContentPart.File) {
  * 轻量 Markdown 渲染：只处理代码块、行内换行与可点链接。
  *
  * 链接用 [LinkAnnotation.Url] 标出来，点一下交给系统处理（浏览器、地图、拨号盘都算）。
+ * 整段包在 [SelectionContainer] 里：长按能选中文字、局部复制，也能「全选」整条。
  */
 @Composable
 fun MarkdownishText(text: String, color: Color) {
@@ -464,35 +494,88 @@ fun MarkdownishText(text: String, color: Color) {
             Toast.makeText(context, "没有应用能打开这个链接", Toast.LENGTH_SHORT).show()
         }
     }
-    Column {
-        segments.forEach { seg ->
-            if (seg.isCode) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                ) {
+    SelectionContainer {
+        Column {
+            segments.forEach { seg ->
+                if (seg.isCode) {
+                    CodeBlock(seg.text, seg.lang)
+                } else {
                     Text(
-                        seg.text,
-                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier
-                            .horizontalScroll(rememberScrollState())
-                            .padding(10.dp),
+                        text = linkify(seg.text, openUri),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = color,
+                        modifier = Modifier.padding(vertical = 2.dp),
                     )
                 }
-            } else {
-                Text(
-                    text = linkify(seg.text, openUri),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = color,
-                    modifier = Modifier.padding(vertical = 2.dp),
-                )
             }
         }
     }
+}
+
+/**
+ * 代码块。
+ *
+ * 右上角一个复制按钮。正文用软换行而不是横向滚动：
+ * 横向可滚的子视图容易被系统长截图的滚动识别和拼接搞乱，
+ * 软换行顺带让长行不再被截断。
+ */
+@Composable
+private fun CodeBlock(code: String, lang: String? = null) {
+    val context = LocalContext.current
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 10.dp, end = 4.dp, top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    lang ?: "代码",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.weight(1f))
+                // 复制按钮自己关掉选中：不然长按它会变成选文本
+                DisableSelection {
+                    IconButton(
+                        onClick = { copyToClipboard(context, code, "代码") },
+                        modifier = Modifier.size(30.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.ContentCopy,
+                            contentDescription = "复制代码",
+                            modifier = Modifier.size(15.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            Text(
+                code,
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
+            )
+        }
+    }
+}
+
+/** 复制到剪贴板，并给用户一个提示。 */
+private fun copyToClipboard(context: Context, text: String, label: String) {
+    val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+    if (manager == null) {
+        Toast.makeText(context, "复制失败：拿不到剪贴板服务", Toast.LENGTH_SHORT).show()
+        return
+    }
+    manager.setPrimaryClip(ClipData.newPlainText(label, text))
+    Toast.makeText(context, "已复制 ${text.length} 个字符", Toast.LENGTH_SHORT).show()
 }
 
 /**
@@ -540,7 +623,7 @@ private fun linkify(text: String, onUri: (String) -> Unit): AnnotatedString = bu
     }
 }
 
-private data class Segment(val text: String, val isCode: Boolean)
+private data class Segment(val text: String, val isCode: Boolean, val lang: String? = null)
 
 private fun splitCodeBlocks(text: String): List<Segment> {    val out = mutableListOf<Segment>()
     var i = 0
@@ -556,7 +639,20 @@ private fun splitCodeBlocks(text: String): List<Segment> {    val out = mutableL
                 out += Segment(text.substring(i), true)
                 break
             }
-            out += Segment(text.substring(i + 3, end).trim('\n'), true)
+            val inner = text.substring(i + 3, end)
+            // ```kotlin 这种语言标记写在开栏同一行，要摘出来当标签，
+            // 混进代码里会让第一行变成 "kotlin"
+            var lang: String? = null
+            var body = inner.trim('\n')
+            val newlineAt = inner.indexOf('\n')
+            if (newlineAt > 0) {
+                val head = inner.substring(0, newlineAt).trim()
+                if (head.isNotEmpty() && head.length <= 24 && head.none { it.isWhitespace() }) {
+                    lang = head
+                    body = inner.substring(newlineAt + 1).trim('\n')
+                }
+            }
+            out += Segment(body, true, lang)
             i = end + 3
         } else {
             buffer.append(text[i])

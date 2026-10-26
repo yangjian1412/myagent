@@ -101,6 +101,13 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
     testImplementation(libs.androidx.test.core)
+    // Compose 语义测试跑在 Robolectric 上：不用真机也能验证气泡里的交互
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    // ui-test-junit4 传递依赖的 ext:junit 1.1.5 本地没有缓存，用项目里的 1.3.0 顶掉
+    testImplementation(libs.androidx.test.junit)
+    // 同一个道理：espresso 3.5.0 没缓存，顶成项目里的 3.7.0
+    testImplementation(libs.androidx.espresso.core)
 
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.androidx.test.junit)

@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,6 +45,7 @@ import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,23 +60,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.LinkAnnotation
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mynok.myagent.core.model.ChatMessage
 import com.mynok.myagent.core.model.ContentPart
 import com.mynok.myagent.core.model.Role
+import kotlinx.coroutines.flow.first
 
 @Composable
 fun MessageList(
@@ -98,6 +98,11 @@ fun MessageList(
     }
     val total = visible.size + if (isStreaming) 1 else 0
 
+    // 新开的列表（换了会话、回到对话页）先站到最新一条上，
+    // 不这样做会停在第一条，看着就是"从上面开始"。
+    // remember 以 listState 为键：会话切换时 MessageList 被 key() 重建，这里自然重置。
+    val needsAnchor = remember(listState) { mutableStateOf(true) }
+
     // 只有用户本来就贴着底部时才跟着滚。
     // 否则模型流式输出会把人硬拽回底部：想翻历史看不了，
     // 系统的长截图也没法往上滚着截。
@@ -118,8 +123,22 @@ fun MessageList(
 
     LaunchedEffect(total, streamingText.length) {
         // atBottom 在协程里读，不会成为 effect 的 key（否则会自激）
-        if (total > 0 && atBottom) {
-            runCatching { listState.animateScrollToItem((total - 1).coerceAtLeast(0)) }
+        if (total <= 0) return@LaunchedEffect
+        if (needsAnchor.value) {
+            needsAnchor.value = false
+            // 直接跳到最新一条，不做动画；不然会先看到从顶上滚下来的一段
+            runCatching { listState.scrollToItem(total - 1) }
+            // 最后一条比屏幕高的话 scrollToItem 只把它顶到视口上沿，
+            // 等排好版再往末尾滚一下，才真的停在最新那段文字上
+            snapshotFlow { listState.layoutInfo }
+                .first { it.totalItemsCount > 0 && it.visibleItemsInfo.isNotEmpty() }
+            runCatching { listState.scroll { scrollBy(1_000_000f) } }
+        } else if (atBottom) {
+            runCatching {
+                listState.animateScrollToItem(total - 1)
+                // 最新一条比屏幕高时光 scrollToItem 只到它顶上，再补一次才贴住底
+                listState.scroll { scrollBy(1_000_000f) }
+            }
         }
     }
 
@@ -499,14 +518,16 @@ private fun SelectableBody(content: @Composable () -> Unit) {
 }
 
 /**
- * 轻量 Markdown 渲染：只处理代码块、行内换行与可点链接。
+ * 消息正文的 Markdown 渲染。
  *
- * 链接用 [LinkAnnotation.Url] 标出来，点一下交给系统处理（浏览器、地图、拨号盘都算）。
+ * 块级语法（标题、列表、引用、表格、分隔线、围栏代码块、段落）由 [parseMarkdown] 解析，
+ * 按类型分别渲染；行内的粗体 / 斜体 / 行内代码 / `[文字](地址)` 链接由 [parseInline]
+ * 标出来，链接点一下交给系统处理（浏览器、地图、拨号盘都算）。
  * 整段包在 [SelectableBody] 里：长按能选中文字、局部复制，也能「全选」整条。
  */
 @Composable
 fun MarkdownishText(text: String, color: Color) {
-    val segments = androidx.compose.runtime.remember(text) { splitCodeBlocks(text) }
+    val blocks = remember(text) { parseMarkdown(text) }
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     // 模型写出来的网址不一定合法，交给系统时抛异常不能把 App 带崩
@@ -517,18 +538,123 @@ fun MarkdownishText(text: String, color: Color) {
     }
     SelectableBody {
         Column {
-            segments.forEach { seg ->
-                if (seg.isCode) {
-                    CodeBlock(seg.text, seg.lang)
-                } else {
-                    Text(
-                        text = linkify(seg.text, openUri),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = color,
-                        modifier = Modifier.padding(vertical = 2.dp),
+            blocks.forEach { block ->
+                when (block) {
+                    is MdBlock.Code -> CodeBlock(block.code, block.lang)
+                    is MdBlock.Heading -> headingText(block, color, openUri)
+                    is MdBlock.Paragraph -> if (block.text.isNotBlank()) {
+                        Text(
+                            text = parseInline(block.text, openUri),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = color,
+                            modifier = Modifier.padding(vertical = 2.dp),
+                        )
+                    }
+                    is MdBlock.Quote -> quoteText(block, openUri)
+                    is MdBlock.Bullet -> bulletRow(block, color, openUri)
+                    is MdBlock.Rule -> HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        modifier = Modifier.padding(vertical = 8.dp),
                     )
+                    is MdBlock.Table -> tableRows(block)
                 }
             }
+        }
+    }
+}
+
+/** 标题字号按 # 的级别往下一档档缩。 */
+@Composable
+private fun headingText(block: MdBlock.Heading, color: Color, openUri: (String) -> Unit) {
+    val base = when (block.level) {
+        1 -> MaterialTheme.typography.titleLarge
+        2 -> MaterialTheme.typography.headlineSmall
+        3 -> MaterialTheme.typography.titleMedium
+        else -> MaterialTheme.typography.titleSmall
+    }
+    Text(
+        text = parseInline(block.text, openUri),
+        style = base.copy(fontWeight = FontWeight.Bold),
+        color = color,
+        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+    )
+}
+
+/** 引用：左边一条竖线，文字弱化。 */
+@Composable
+private fun quoteText(block: MdBlock.Quote, openUri: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .padding(vertical = 4.dp)
+            .height(IntrinsicSize.Min),
+    ) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = parseInline(block.text, openUri),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/** 列表项：按层级缩进，无序补一个 •，有序照搬源文里的编号。 */
+@Composable
+private fun bulletRow(block: MdBlock.Bullet, color: Color, openUri: (String) -> Unit) {
+    Row(modifier = Modifier.padding(start = (6 + block.level * 16).dp, top = 2.dp, bottom = 2.dp)) {
+        Text(
+            text = block.marker ?: "•",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = parseInline(block.text, openUri),
+            style = MaterialTheme.typography.bodyMedium,
+            color = color,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/**
+ * 表格：列宽平分。没做按内容量列——那要 measure 两轮才行，
+ * 而且超出气泡宽度的列也修不好，先把竖线拿掉、按列排整齐就是好消息。
+ */
+@Composable
+private fun tableRows(block: MdBlock.Table) {
+    val cellCount = maxOf(block.header.size, block.rows.maxOfOrNull { it.size } ?: 0)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+    ) {
+        tableRow(block.header, cellCount, bold = true)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        block.rows.forEach { tableRow(it, cellCount, bold = false) }
+    }
+}
+
+@Composable
+private fun tableRow(cells: List<String>, cellCount: Int, bold: Boolean) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        for (c in 0 until cellCount) {
+            Text(
+                text = cells.getOrNull(c).orEmpty(),
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 6.dp, top = 3.dp, bottom = 3.dp),
+            )
         }
     }
 }
@@ -597,89 +723,4 @@ private fun copyToClipboard(context: Context, text: String, label: String) {
     }
     manager.setPrimaryClip(ClipData.newPlainText(label, text))
     Toast.makeText(context, "已复制 ${text.length} 个字符", Toast.LENGTH_SHORT).show()
-}
-
-/**
- * 把文本里的网址变成可点的链接。
- *
- * 结尾的标点要摘出来：中文句子里「看这里 https://a.com/x，然后」的逗号不算网址的一部分，
- * 括号同理，`https://a.com/x_(y)` 的右括号也不该跟着进去。
- */
-private val URL_PATTERN = Regex("""https?://[^\s<>"'】]+""")
-
-/** 网址结尾一般不带这些字符。 */
-private const val TRAILING_PUNCTUATION = ".,;:!?，。、；：！？)）】]》」』\"'"
-
-private fun linkify(text: String, onUri: (String) -> Unit): AnnotatedString = buildAnnotatedString {
-    var index = 0
-    URL_PATTERN.findAll(text).forEach { match ->
-        if (match.range.first > index) {
-            append(text.substring(index, match.range.first))
-        }
-        val matched = match.value
-        val trailing = matched.takeLastWhile { it in TRAILING_PUNCTUATION }
-        val url = matched.removeSuffix(trailing)
-        val start = length
-        append(url)
-        addLink(
-            LinkAnnotation.Url(
-                url = url,
-                styles = TextLinkStyles(
-                    style = SpanStyle(
-                        color = Color(0xFF1A73E8),
-                        textDecoration = TextDecoration.Underline,
-                    ),
-                ),
-                linkInteractionListener = { onUri(url) },
-            ),
-            start,
-            length,
-        )
-        // 摘掉的标点原样还回去，摆在链接外面
-        append(trailing)
-        index = match.range.last + 1
-    }
-    if (index < text.length) {
-        append(text.substring(index))
-    }
-}
-
-private data class Segment(val text: String, val isCode: Boolean, val lang: String? = null)
-
-private fun splitCodeBlocks(text: String): List<Segment> {    val out = mutableListOf<Segment>()
-    var i = 0
-    val buffer = StringBuilder()
-    while (i < text.length) {
-        if (text.startsWith("```", i)) {
-            if (buffer.isNotEmpty()) {
-                out += Segment(buffer.toString(), false)
-                buffer.setLength(0)
-            }
-            val end = text.indexOf("```", i + 3)
-            if (end < 0) {
-                out += Segment(text.substring(i), true)
-                break
-            }
-            val inner = text.substring(i + 3, end)
-            // ```kotlin 这种语言标记写在开栏同一行，要摘出来当标签，
-            // 混进代码里会让第一行变成 "kotlin"
-            var lang: String? = null
-            var body = inner.trim('\n')
-            val newlineAt = inner.indexOf('\n')
-            if (newlineAt > 0) {
-                val head = inner.substring(0, newlineAt).trim()
-                if (head.isNotEmpty() && head.length <= 24 && head.none { it.isWhitespace() }) {
-                    lang = head
-                    body = inner.substring(newlineAt + 1).trim('\n')
-                }
-            }
-            out += Segment(body, true, lang)
-            i = end + 3
-        } else {
-            buffer.append(text[i])
-            i++
-        }
-    }
-    if (buffer.isNotEmpty()) out += Segment(buffer.toString(), false)
-    return out
 }

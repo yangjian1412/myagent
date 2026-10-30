@@ -96,4 +96,43 @@ class MarkdownishTextTest {
         setContent("这一段应该可以被选中复制")
         compose.onNodeWithText("这一段应该可以被选中复制").assertExists()
     }
+
+    @Test
+    fun `粗体星号不显示`() {
+        setContent("这是**加粗**的文字")
+        compose.onNodeWithText("这是加粗的文字").assertExists()
+        compose.onNodeWithText("**加粗**").assertDoesNotExist()
+    }
+
+    @Test
+    fun `行内代码反引号不显示`() {
+        setContent("跑 `npm install` 就行")
+        compose.onNodeWithText("跑 npm install 就行").assertExists()
+    }
+
+    @Test
+    fun `标题不显示井号`() {
+        setContent("## 安装步骤")
+        compose.onNodeWithText("安装步骤").assertExists()
+    }
+
+    @Test
+    fun `列表项换成圆点标记`() {
+        setContent("- 苹果\n- 香蕉")
+        compose.onNodeWithText("苹果").assertExists()
+        compose.onNodeWithText("- 苹果").assertDoesNotExist()
+    }
+
+    @Test
+    fun `引用不显示大于号`() {
+        setContent("> 这是引用")
+        compose.onNodeWithText("这是引用").assertExists()
+    }
+
+    @Test
+    fun `表格竖线不显示`() {
+        setContent("| 名字 | 年龄 |\n| --- | --- |\n| 张三 | 10 |")
+        compose.onNodeWithText("张三").assertExists()
+        compose.onNodeWithText("| 张三 | 10 |").assertDoesNotExist()
+    }
 }

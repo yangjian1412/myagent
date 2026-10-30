@@ -56,6 +56,7 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -579,23 +580,27 @@ private fun ChatLayout(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
                 )
             }
-            MessageList(
-                messages = state.messages,
-                streamingText = state.streamingText,
-                isStreaming = state.isStreaming,
-                traces = state.traces,
-                onRegenerate = { index ->
-                    state.nodes.getOrNull(index)?.let { vm.regenerateFrom(it.id) }
-                },
-                onEdit = { index ->
-                    editingIndex = index
-                    editingText = state.messages.getOrNull(index)?.text.orEmpty()
-                },
-                modifier = Modifier.weight(1f),
-                streamingReasoning = state.streamingReasoning,
-                showReasoning = state.showReasoning,
-                showToolCalls = state.showToolCalls,
-            )
+            // 把列表状态绑在会话上：换到另一个会话时重建列表，
+            // 新会话一进来就站在最新一条上，而不是停在旧位置或顶上
+            key(state.conversationId) {
+                MessageList(
+                    messages = state.messages,
+                    streamingText = state.streamingText,
+                    isStreaming = state.isStreaming,
+                    traces = state.traces,
+                    onRegenerate = { index ->
+                        state.nodes.getOrNull(index)?.let { vm.regenerateFrom(it.id) }
+                    },
+                    onEdit = { index ->
+                        editingIndex = index
+                        editingText = state.messages.getOrNull(index)?.text.orEmpty()
+                    },
+                    modifier = Modifier.weight(1f),
+                    streamingReasoning = state.streamingReasoning,
+                    showReasoning = state.showReasoning,
+                    showToolCalls = state.showToolCalls,
+                )
+            }
             if (state.skills.isNotEmpty()) {
                 SkillChipRow(
                     skills = state.skills.filter { it.enabled },
